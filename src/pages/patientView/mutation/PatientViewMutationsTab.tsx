@@ -282,6 +282,10 @@ export default class PatientViewMutationsTab extends React.Component<
                         this.props.patientViewPageStore
                             .indexedVariantAnnotations
                     }
+                    indexedAlphaGenomeAnnotations={
+                        this.props.patientViewPageStore
+                            .indexedAlphaGenomeAnnotations
+                    }
                     indexedMyVariantInfoAnnotations={
                         this.props.patientViewPageStore
                             .indexedMyVariantInfoAnnotations
@@ -333,6 +337,9 @@ export default class PatientViewMutationsTab extends React.Component<
                     enableHotspot={getServerConfig().show_hotspot}
                     enableCivic={getServerConfig().show_civic}
                     enableRevue={getServerConfig().show_revue}
+                    enableAlphaGenome={
+                        getServerConfig().show_alphagenome
+                    }
                     columnVisibility={this.props.mutationTableColumnVisibility}
                     columnVisibilityProps={{
                         onColumnToggled: this.props

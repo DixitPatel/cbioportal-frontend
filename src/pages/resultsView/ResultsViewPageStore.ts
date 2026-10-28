@@ -3901,6 +3901,7 @@ export class ResultsViewPageStore extends AnalysisStore
             this.germlineConsentedSamples,
             this.indexedHotspotData,
             this.indexedVariantAnnotations,
+            this.indexedAlphaGenomeAnnotations,
             this.uniqueSampleKeyToTumorType.result!,
             this.generateGenomeNexusHgvsgUrl,
             this.clinicalDataGroupedBySampleMap,
@@ -5453,6 +5454,29 @@ export class ResultsViewPageStore extends AnalysisStore
                                   ? GENOME_NEXUS_ARG_FIELD_ENUM.SIGNAL
                                   : '',
                           ].filter(f => f),
+                          getServerConfig().genomenexus_isoform_override_source,
+                          this.genomeNexusClient
+                      )
+                    : undefined,
+            onError: (err: Error) => {
+                // fail silently, leave the error handling responsibility to the data consumer
+            },
+        },
+        undefined
+    );
+
+    // AlphaGenome annotations are fetched separately so cold-cache scoring
+    // does not delay the shared Genome Nexus fields above.
+    readonly indexedAlphaGenomeAnnotations = remoteData<
+        { [genomicLocation: string]: VariantAnnotation } | undefined
+    >(
+        {
+            await: () => [this.mutations],
+            invoke: async () =>
+                getServerConfig().show_alphagenome && this.mutations.result
+                    ? await fetchVariantAnnotationsIndexedByGenomicLocation(
+                          this.mutations.result,
+                          [GENOME_NEXUS_ARG_FIELD_ENUM.ALPHA_GENOME],
                           getServerConfig().genomenexus_isoform_override_source,
                           this.genomeNexusClient
                       )

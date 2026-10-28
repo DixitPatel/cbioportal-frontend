@@ -198,6 +198,9 @@ export default class MutationTableWrapper extends React.Component<
                                 indexedVariantAnnotations={
                                     this.pageStore.indexedVariantAnnotations
                                 }
+                                indexedAlphaGenomeAnnotations={
+                                    this.pageStore.indexedAlphaGenomeAnnotations
+                                }
                                 indexedMyVariantInfoAnnotations={
                                     this.pageStore
                                         .indexedMyVariantInfoAnnotations
@@ -254,6 +257,9 @@ export default class MutationTableWrapper extends React.Component<
                                 enableHotspot={getServerConfig().show_hotspot}
                                 enableCivic={getServerConfig().show_civic}
                                 enableRevue={getServerConfig().show_revue}
+                                enableAlphaGenome={
+                                    getServerConfig().show_alphagenome
+                                }
                                 columnVisibility={this.props.columnVisibility}
                                 showGeneFilterMenu={
                                     this.pageStore

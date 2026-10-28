@@ -97,6 +97,9 @@ export default class ResultsViewMutationMapperStore extends MutationMapperStore 
         public indexedVariantAnnotations: MobxPromise<
             { [genomicLocation: string]: VariantAnnotation } | undefined
         >,
+        public indexedAlphaGenomeAnnotations: MobxPromise<
+            { [genomicLocation: string]: VariantAnnotation } | undefined
+        >,
         public uniqueSampleKeyToTumorType: {
             [uniqueSampleKey: string]: string;
         },

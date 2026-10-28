@@ -1929,6 +1929,29 @@ export class PatientViewPageStore {
         },
     });
 
+    readonly indexedAlphaGenomeAnnotations = remoteData<
+        { [genomicLocation: string]: VariantAnnotation } | undefined
+    >({
+        await: () => [this.mutationData, this.uncalledMutationData],
+        invoke: async () => {
+            if (!getServerConfig().show_alphagenome) {
+                return undefined;
+            }
+            return fetchVariantAnnotationsIndexedByGenomicLocation(
+                concatMutationData(
+                    this.mutationData,
+                    this.uncalledMutationData
+                ),
+                [GENOME_NEXUS_ARG_FIELD_ENUM.ALPHA_GENOME],
+                getServerConfig().genomenexus_isoform_override_source,
+                this.genomeNexusClient
+            );
+        },
+        onError: () => {
+            // fail silently, leave the error handling responsibility to the data consumer
+        },
+    });
+
     readonly hotspotData = remoteData({
         await: () => [this.mutationData, this.uncalledMutationData],
         invoke: async () => {
