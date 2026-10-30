@@ -1,5 +1,8 @@
 import { assert } from 'chai';
+import { fireEvent, render, waitFor } from '@testing-library/react';
+import React from 'react';
 import {
+    AlphaGenomeCell,
     alphaGenomeLabel,
     scoreLevel,
     sortValue,
@@ -93,5 +96,48 @@ describe('AlphaGenome dual-gate labels', () => {
 
     it('always carries the non-clinical disclaimer', () => {
         assert.include(DISCLAIMER, 'not experimental evidence');
+    });
+});
+
+describe('AlphaGenomeCell across table sorts', () => {
+    it('keeps the icon when a new annotation arrives under a stored tissue selection', () => {
+        // react-table v6 reuses the cell instance by position on sort, so the
+        // mounted tissue selection can belong to the previous row's mutation.
+        // The cell must fall back to the new annotation's tissues, not blank.
+        const before = annotationWithScores([
+            row('RNA_SEQ', 0.9, 0.995, 'CL:0000001'),
+        ]);
+        const after = annotationWithScores([
+            row('RNA_SEQ', 0.9, 0.995, 'CL:0000002'),
+        ]);
+        const { rerender, container } = render(
+            <AlphaGenomeCell annotation={before} />
+        );
+        assert.include(container.textContent ?? '', 'αG');
+        rerender(<AlphaGenomeCell annotation={after} />);
+        assert.include(container.textContent ?? '', 'αG');
+    });
+
+    it('keeps the table icon after exploring a tissue with no passing score', async () => {
+        // The tooltip tissue selector must not write back into the cell:
+        // picking a failing tissue blanked the icon, removing the only way
+        // to reopen the tooltip.
+        const annotation = annotationWithScores([
+            row('RNA_SEQ', 0.9, 0.995, 'CL:0000001'),
+            row('RNA_SEQ', 0.01, 0.5, 'CL:0000002'),
+        ]);
+        const { container } = render(
+            <AlphaGenomeCell annotation={annotation} />
+        );
+        assert.include(container.textContent ?? '', 'αG');
+        fireEvent.mouseEnter(container.firstChild as Element);
+        const select = await waitFor(() => {
+            const el = document.body.querySelector('select');
+            assert.isNotNull(el);
+            return el as HTMLSelectElement;
+        });
+        fireEvent.change(select, { target: { value: 'CL:0000002' } });
+        assert.include(container.textContent ?? '', 'αG');
+        assert.include(document.body.textContent ?? '', 'CL:0000002');
     });
 });

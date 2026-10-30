@@ -99,6 +99,13 @@ function availableCuries(rows: AlphaGenomeScore[]): string[] {
     return curies;
 }
 
+function formatScore(value: number | undefined | null): string {
+    if (value == null || !isFinite(value)) {
+        return '';
+    }
+    return value.toFixed(4);
+}
+
 function rowForOutputType(
     rows: AlphaGenomeScore[],
     outputType: string,
@@ -149,43 +156,49 @@ function TissueBarChart(props: {
             <div>
                 <strong>{props.outputType} by tissue</strong>
             </div>
-            {entries.map(([curie, value]) => (
-                <div
-                    key={curie}
-                    onClick={() => props.onSelect(curie)}
-                    style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                    <span
-                        style={{
-                            display: 'inline-block',
-                            width: 160,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            fontWeight: curie === props.selectedCurie ? 'bold' : 'normal',
-                        }}
-                    >
-                        {curie}
-                    </span>
-                    <span
-                        style={{
-                            display: 'inline-block',
-                            width: 120,
-                            backgroundColor: '#eee',
-                        }}
+            <div style={{ maxHeight: 168, overflowY: 'auto' }}>
+                {entries.map(([curie, value]) => (
+                    <div
+                        key={curie}
+                        onClick={() => props.onSelect(curie)}
+                        style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
                         <span
                             style={{
                                 display: 'inline-block',
-                                width: `${(value / max) * 120}px`,
-                                backgroundColor:
-                                    curie === props.selectedCurie ? '#2c7fb8' : '#999',
-                                height: 10,
+                                width: 100,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                verticalAlign: 'bottom',
+                                fontWeight:
+                                    curie === props.selectedCurie ? 'bold' : 'normal',
                             }}
-                        />
-                    </span>{' '}
-                    <span>{value.toFixed(3)}</span>
-                </div>
-            ))}
+                        >
+                            {curie}
+                        </span>
+                        <span
+                            style={{
+                                display: 'inline-block',
+                                width: 90,
+                                backgroundColor: '#eee',
+                            }}
+                        >
+                            <span
+                                style={{
+                                    display: 'inline-block',
+                                    width: `${(value / max) * 90}px`,
+                                    backgroundColor:
+                                        curie === props.selectedCurie
+                                            ? '#2c7fb8'
+                                            : '#999',
+                                    height: 10,
+                                }}
+                            />
+                        </span>{' '}
+                        <span>{value.toFixed(3)}</span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
@@ -194,45 +207,76 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
     annotation: AlphaGenomeAnnotation;
     cancerType?: string;
     ontologyCurie?: string;
-    onTissueSelect?: (curie: string) => void;
 }> = props => {
     const rows = props.annotation.annotation?.scores ?? [];
     const curies = availableCuries(rows);
     const [selectedType, setSelectedType] = React.useState<string>('RNA_SEQ');
+    // Tissue exploration is local to the open tooltip and never writes back
+    // to the table cell: picking a tissue with no passing score must not
+    // blank the row's icon (the only way to reopen the tooltip).
     const [selectedCurie, setSelectedCurie] = React.useState<string | undefined>(
-        props.ontologyCurie ?? defaultCurieForCancerType(props.cancerType) ?? curies[0]
+        undefined
     );
+    // Derive the effective tissue at render time: after a table sort the same
+    // component instance can receive a different mutation, so a stored
+    // selection that is no longer in this annotation must fall back instead
+    // of yielding an empty label/tooltip.
+    const valid = (curie: string | undefined) =>
+        curie && curies.includes(curie) ? curie : undefined;
+    const effectiveCurie =
+        valid(selectedCurie) ??
+        valid(props.ontologyCurie) ??
+        defaultCurieForCancerType(props.cancerType) ??
+        curies[0];
     const selectCurie = (curie: string) => {
         setSelectedCurie(curie);
-        props.onTissueSelect?.(curie);
+    };
+    const cellStyle: React.CSSProperties = {
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        padding: '2px 6px 2px 0',
     };
     return (
-        <div style={{ maxWidth: 460 }}>
-            <div>
+        <div style={{ width: 440, maxWidth: '90vw', fontSize: 12 }}>
+            <div
+                style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }}
+            >
                 <strong>
                     AlphaGenome {props.annotation.annotation?.canonical_gene ?? ''}
                 </strong>{' '}
                 ({props.annotation.annotation?.hg38_variant ?? ''})
             </div>
-            <table>
+            <table style={{ tableLayout: 'fixed', width: '100%' }}>
+                <colgroup>
+                    <col style={{ width: '30%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '30%' }} />
+                    <col style={{ width: '13%' }} />
+                    <col style={{ width: '13%' }} />
+                </colgroup>
                 <thead>
                     <tr>
-                        <th>Output</th>
-                        <th>Gene</th>
-                        <th>Track</th>
-                        <th>Raw</th>
-                        <th>Quantile</th>
+                        <th style={cellStyle}>Output</th>
+                        <th style={cellStyle}>Gene</th>
+                        <th style={cellStyle}>Track</th>
+                        <th style={cellStyle}>Raw</th>
+                        <th style={cellStyle}>Quantile</th>
                     </tr>
                 </thead>
                 <tbody>
                     {OUTPUT_TYPES.map(outputType => {
-                        const row = rowForOutputType(rows, outputType, selectedCurie);
+                        const row = rowForOutputType(rows, outputType, effectiveCurie);
                         if (!row) {
                             return null;
                         }
                         return (
                             <tr key={outputType}>
-                                <td>
+                                <td style={cellStyle}>
                                     <a
                                         href="#"
                                         onClick={e => {
@@ -243,10 +287,12 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
                                         {outputType}
                                     </a>
                                 </td>
-                                <td>{row.gene_name ?? ''}</td>
-                                <td>{row.track_name ?? ''}</td>
-                                <td>{row.raw_score ?? ''}</td>
-                                <td>{row.quantile_score ?? ''}</td>
+                                <td style={cellStyle}>{row.gene_name ?? ''}</td>
+                                <td style={cellStyle}>{row.track_name ?? ''}</td>
+                                <td style={cellStyle}>{formatScore(row.raw_score)}</td>
+                                <td style={cellStyle}>
+                                    {formatScore(row.quantile_score)}
+                                </td>
                             </tr>
                         );
                     })}
@@ -257,7 +303,7 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
                     <label>
                         Tissue:{` `}
                         <select
-                            value={selectedCurie ?? ''}
+                            value={effectiveCurie ?? ''}
                             onChange={e => selectCurie(e.target.value)}
                         >
                             {curies.map(curie => (
@@ -272,7 +318,7 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
             <TissueBarChart
                 rows={rows}
                 outputType={selectedType}
-                selectedCurie={selectedCurie}
+                selectedCurie={effectiveCurie}
                 onSelect={selectCurie}
             />
             <div style={{ marginTop: 8, fontStyle: 'italic' }}>{DISCLAIMER}</div>
@@ -285,13 +331,12 @@ export const AlphaGenomeCell: React.FunctionComponent<{
     cancerType?: string;
     ontologyCurie?: string;
 }> = props => {
-    const rows = props.annotation?.annotation?.scores ?? [];
-    const [selectedCurie, setSelectedCurie] = React.useState<string | undefined>(
-        props.ontologyCurie ??
-            defaultCurieForCancerType(props.cancerType) ??
-            availableCuries(rows)[0]
-    );
-    const label = alphaGenomeLabel(props.annotation, selectedCurie);
+    // The icon label is stable: it follows the study tissue (or the best
+    // tissue overall), never the tooltip's transient exploration selection,
+    // so exploring a tissue with no passing score cannot blank the row.
+    const displayCurie =
+        props.ontologyCurie ?? defaultCurieForCancerType(props.cancerType);
+    const label = alphaGenomeLabel(props.annotation, displayCurie);
     if (!label) {
         return <span className={`${annotationStyles['annotation-item']}`} />;
     }
@@ -302,8 +347,7 @@ export const AlphaGenomeCell: React.FunctionComponent<{
                 <AlphaGenomeTooltipContent
                     annotation={props.annotation!}
                     cancerType={props.cancerType}
-                    ontologyCurie={selectedCurie}
-                    onTissueSelect={setSelectedCurie}
+                    ontologyCurie={displayCurie}
                 />
             }
         >
