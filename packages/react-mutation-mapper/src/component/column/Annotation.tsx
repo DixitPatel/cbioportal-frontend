@@ -43,6 +43,7 @@ import {
 import { RevueCell, sortValue as revueSortValue } from '../revue/Revue';
 import {
     AlphaGenomeCell,
+    AlphaGenomeCellStatus,
     sortValue as alphaGenomeSortValue,
 } from '../alphagenome/AlphaGenome';
 import annotationStyles from './annotation.module.scss';
@@ -113,6 +114,7 @@ export interface IAnnotation {
     hugoGeneSymbol: string;
     vue?: VUE;
     alphaGenome?: AlphaGenomeAnnotation;
+    alphaGenomeStatus: AlphaGenomeCellStatus;
 }
 
 export const DEFAULT_ANNOTATION_DATA: IAnnotation = {
@@ -129,6 +131,7 @@ export const DEFAULT_ANNOTATION_DATA: IAnnotation = {
     hugoGeneSymbol: '',
     hasCivicVariants: true,
     civicStatus: 'complete',
+    alphaGenomeStatus: 'complete',
 };
 
 function getDefaultEntrezGeneId(mutation: Mutation): number {
@@ -266,6 +269,9 @@ export function getAnnotationData(
                           indexedAlphaGenomeAnnotations.result
                       )?.alpha_genome
                     : undefined,
+            alphaGenomeStatus: indexedAlphaGenomeAnnotations
+                ? indexedAlphaGenomeAnnotations.status
+                : 'complete',
         };
 
         // oncoKbData may exist but it might be an instance of Error, in that case we flag the status as error
@@ -403,7 +409,10 @@ export function GenericAnnotation(props: GenericAnnotationProps): JSX.Element {
                 <></>
             )}
             {enableAlphaGenome ? (
-                <AlphaGenomeCell annotation={annotation.alphaGenome} />
+                <AlphaGenomeCell
+                    annotation={annotation.alphaGenome}
+                    status={annotation.alphaGenomeStatus}
+                />
             ) : (
                 <></>
             )}

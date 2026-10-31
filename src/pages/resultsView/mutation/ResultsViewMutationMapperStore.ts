@@ -60,6 +60,18 @@ import NumericNamespaceColumnFormatter from 'shared/components/namespaceColumns/
 import CategoricalNamespaceColumnFormatter from 'shared/components/namespaceColumns/CategoricalNamespaceColumnFormatter';
 import { createNamespaceColumnName } from 'shared/components/namespaceColumns/namespaceColumnsUtils';
 
+// Decoupled AlphaGenome background-scoring state, owned by
+// ResultsViewPageStore and passed in so the per-gene mapper store (and its
+// toolbar control) can trigger scoring and observe chunk progress without a
+// direct page-store reference. The closures read page-store observables, so
+// MobX tracks them when called inside reactions or observer renders.
+export interface IAlphaGenomeScoringState {
+    isTriggered: () => boolean;
+    isScoring: () => boolean;
+    progress: () => { done: number; total: number };
+    trigger: () => void;
+}
+
 export default class ResultsViewMutationMapperStore extends MutationMapperStore {
     constructor(
         protected mutationMapperServerConfig: IServerConfig,
@@ -113,7 +125,8 @@ export default class ResultsViewMutationMapperStore extends MutationMapperStore 
         }>,
         protected genomenexusClient?: GenomeNexusAPI,
         protected genomenexusInternalClient?: GenomeNexusAPIInternal,
-        public getTranscriptId?: () => string
+        public getTranscriptId?: () => string,
+        public alphaGenomeScoring?: IAlphaGenomeScoringState
     ) {
         super(
             mutationMapperServerConfig,

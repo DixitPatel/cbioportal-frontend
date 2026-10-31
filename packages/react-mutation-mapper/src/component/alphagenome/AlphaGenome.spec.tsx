@@ -118,6 +118,35 @@ describe('AlphaGenomeCell across table sorts', () => {
         assert.include(container.textContent ?? '', 'αG');
     });
 
+    it('shows a spinner in the pinned slot while scoring with no label', () => {
+        const annotation = annotationWithScores([
+            row('RNA_SEQ', 0.9, 0.5, 'CL:0000001'),
+        ]);
+        const { container } = render(
+            <AlphaGenomeCell annotation={annotation} status="pending" />
+        );
+        assert.notInclude(container.textContent ?? '', 'αG');
+        assert.isNotNull(
+            container.querySelector('.fa-spinner'),
+            'expected a loading spinner while pending'
+        );
+    });
+
+    it('renders an empty pinned placeholder when idle with no label', () => {
+        const annotation = annotationWithScores([
+            row('RNA_SEQ', 0.9, 0.5, 'CL:0000001'),
+        ]);
+        const { container } = render(
+            <AlphaGenomeCell annotation={annotation} status="complete" />
+        );
+        assert.notInclude(container.textContent ?? '', 'αG');
+        assert.isNull(container.querySelector('.fa-spinner'));
+        assert.isNotNull(
+            container.querySelector('.annotation-item'),
+            'expected the pinned 22px placeholder slot'
+        );
+    });
+
     it('keeps the table icon after exploring a tissue with no passing score', async () => {
         // The tooltip tissue selector must not write back into the cell:
         // picking a failing tissue blanked the icon, removing the only way

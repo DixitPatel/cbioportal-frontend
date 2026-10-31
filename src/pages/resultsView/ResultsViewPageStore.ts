@@ -49,6 +49,7 @@ import {
     makeObservable,
     observable,
     reaction,
+    runInAction,
 } from 'mobx';
 import {
     IOncoKbData,
@@ -433,6 +434,15 @@ interface IResultsViewExclusionSettings {
 }
 
 const ONCOPRINT_COLOR_CONFIG = 'clinicalTracksColorConfig';
+
+// Background AlphaGenome scoring queue: variants are dispatched to Genome
+// Nexus in chunks of this size so cold-cache cohorts never block page load.
+export const ALPHA_GENOME_SCORING_CHUNK_SIZE = 16;
+
+export type AlphaGenomeScoringProgress = {
+    done: number;
+    total: number;
+};
 
 /* fields and methods in the class below are ordered based on roughly
 /* chronological setup concerns, rather than on encapsulation and public API */
@@ -3909,7 +3919,13 @@ export class ResultsViewPageStore extends AnalysisStore
             this.clinicalAttributeIdToAvailableFrequency,
             this.genomeNexusClient,
             this.genomeNexusInternalClient,
-            () => this.urlWrapper.query.mutations_transcript_id
+            () => this.urlWrapper.query.mutations_transcript_id,
+            {
+                isTriggered: () => this.isAlphaGenomeTriggered,
+                isScoring: () => this.isAlphaGenomeScoring,
+                progress: () => this.alphaGenomeProgress,
+                trigger: () => this.triggerAlphaGenomeScoring(),
+            }
         );
         this.mutationMapperStoreByGeneWithDriverKey[
             this.getGeneWithDriverKey(gene)
@@ -5465,22 +5481,113 @@ export class ResultsViewPageStore extends AnalysisStore
         undefined
     );
 
+    // Decoupled AlphaGenome trigger state. The mutations table renders cold
+    // (empty 22px placeholders) until the user starts background scoring via
+    // the toolbar control; rows then hydrate chunk by chunk without a page
+    // load stall or 504 from one monolithic request.
+    @observable public isAlphaGenomeTriggered = false;
+    @observable public isAlphaGenomeScoring = false;
+    @observable.shallow public streamingAlphaGenomeAnnotations: {
+        [genomicLocation: string]: VariantAnnotation;
+    } = {};
+    @observable public alphaGenomeProgress: AlphaGenomeScoringProgress = {
+        done: 0,
+        total: 0,
+    };
+
+    @action.bound
+    public triggerAlphaGenomeScoring(): void {
+        if (
+            this.isAlphaGenomeTriggered ||
+            !getServerConfig().show_alphagenome
+        ) {
+            return;
+        }
+        // All pre-fetch writes happen here in the action: the remoteData
+        // invoke below must stay read-only until its first await so MobX
+        // never sees an observable write inside a derivation.
+        this.isAlphaGenomeTriggered = true;
+        this.isAlphaGenomeScoring = true;
+        this.streamingAlphaGenomeAnnotations = {};
+        this.alphaGenomeProgress = {
+            done: 0,
+            total: this.mutations.result
+                ? this.mutations.result.length
+                : 0,
+        };
+    }
+
     // AlphaGenome annotations are fetched separately so cold-cache scoring
-    // does not delay the shared Genome Nexus fields above.
+    // does not delay the shared Genome Nexus fields above. The invoke stays
+    // idle (result undefined) until triggerAlphaGenomeScoring flips
+    // isAlphaGenomeTriggered; MobX re-invokes because the flag is read here.
+    // Variants are dispatched sequentially in chunks of 16, merging each
+    // chunk into streamingAlphaGenomeAnnotations for progress tracking.
     readonly indexedAlphaGenomeAnnotations = remoteData<
         { [genomicLocation: string]: VariantAnnotation } | undefined
     >(
         {
             await: () => [this.mutations],
-            invoke: async () =>
-                getServerConfig().show_alphagenome && this.mutations.result
-                    ? await fetchVariantAnnotationsIndexedByGenomicLocation(
-                          this.mutations.result,
-                          [GENOME_NEXUS_ARG_FIELD_ENUM.ALPHA_GENOME],
-                          getServerConfig().genomenexus_isoform_override_source,
-                          this.genomeNexusClient
-                      )
-                    : undefined,
+            invoke: async () => {
+                if (
+                    !this.isAlphaGenomeTriggered ||
+                    !getServerConfig().show_alphagenome ||
+                    !this.mutations.result
+                ) {
+                    return undefined;
+                }
+                const mutations = this.mutations.result;
+                const merged: {
+                    [genomicLocation: string]: VariantAnnotation;
+                } = {};
+                try {
+                    for (
+                        let i = 0;
+                        i < mutations.length;
+                        i += ALPHA_GENOME_SCORING_CHUNK_SIZE
+                    ) {
+                        const chunk = mutations.slice(
+                            i,
+                            i + ALPHA_GENOME_SCORING_CHUNK_SIZE
+                        );
+                        const indexed = await fetchVariantAnnotationsIndexedByGenomicLocation(
+                            chunk,
+                            [GENOME_NEXUS_ARG_FIELD_ENUM.ALPHA_GENOME],
+                            getServerConfig()
+                                .genomenexus_isoform_override_source,
+                            this.genomeNexusClient
+                        );
+                        const done = Math.min(
+                            i + chunk.length,
+                            mutations.length
+                        );
+                        runInAction(() => {
+                            if (indexed) {
+                                Object.assign(
+                                    this.streamingAlphaGenomeAnnotations,
+                                    indexed
+                                );
+                                Object.assign(merged, indexed);
+                            }
+                            // Re-armed here (in addition to the trigger
+                            // action) so a mutations refetch that re-invokes
+                            // this fetch also reports scoring in flight.
+                            // This observable is never read above, so the
+                            // write cannot re-trigger the fetch.
+                            this.isAlphaGenomeScoring = true;
+                            this.alphaGenomeProgress = {
+                                done,
+                                total: mutations.length,
+                            };
+                        });
+                    }
+                } finally {
+                    runInAction(() => {
+                        this.isAlphaGenomeScoring = false;
+                    });
+                }
+                return merged;
+            },
             onError: (err: Error) => {
                 // fail silently, leave the error handling responsibility to the data consumer
             },

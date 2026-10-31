@@ -1,5 +1,6 @@
 import React from 'react';
 import { DefaultTooltip } from 'cbioportal-frontend-commons';
+import { loaderIcon } from '../StatusHelpers';
 import {
     AlphaGenomeAnnotation,
     AlphaGenomeScore,
@@ -326,10 +327,13 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
     );
 };
 
+export type AlphaGenomeCellStatus = 'pending' | 'error' | 'complete';
+
 export const AlphaGenomeCell: React.FunctionComponent<{
     annotation?: AlphaGenomeAnnotation;
     cancerType?: string;
     ontologyCurie?: string;
+    status?: AlphaGenomeCellStatus;
 }> = props => {
     // The icon label is stable: it follows the study tissue (or the best
     // tissue overall), never the tooltip's transient exploration selection,
@@ -338,6 +342,11 @@ export const AlphaGenomeCell: React.FunctionComponent<{
         props.ontologyCurie ?? defaultCurieForCancerType(props.cancerType);
     const label = alphaGenomeLabel(props.annotation, displayCurie);
     if (!label) {
+        // While a background scoring queue is in flight, hold the pinned
+        // 22px slot with an in-place spinner instead of an empty placeholder.
+        if (props.status === 'pending') {
+            return loaderIcon('pull-left');
+        }
         return <span className={`${annotationStyles['annotation-item']}`} />;
     }
     return (

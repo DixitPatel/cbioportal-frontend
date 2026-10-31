@@ -85,6 +85,59 @@ export interface IResultsViewMutationMapperProps extends IMutationMapperProps {
 // from Genome Nexus, which is only done for queries up to this size
 const MAX_MUTATIONS_FOR_FUNCTIONAL_IMPACT_FILTER = 10000;
 
+// Decoupled AlphaGenome trigger: the mutations table renders cold with empty
+// 22px annotation slots, and scoring only starts when the user clicks through
+// here. Variants are dispatched in background chunks of 16 while rows hydrate
+// in place, so neither page load nor the toolbar blocks on cold-cache cohorts.
+@observer
+export class AlphaGenomeToolbarControl extends React.Component<
+    { store: ResultsViewMutationMapperStore },
+    {}
+> {
+    public render() {
+        if (!getServerConfig().show_alphagenome) {
+            return null;
+        }
+        const scoring = this.props.store.alphaGenomeScoring;
+        if (!scoring) {
+            return null;
+        }
+        if (!scoring.isTriggered()) {
+            return (
+                <button
+                    className="btn btn-default btn-xs"
+                    onClick={() => scoring.trigger()}
+                    title="Score all mutations with AlphaGenome in the background"
+                >
+                    ⚡ Score AlphaGenome
+                </button>
+            );
+        }
+        const progress = scoring.progress();
+        if (scoring.isScoring()) {
+            return (
+                <button
+                    className="btn btn-default btn-xs"
+                    disabled={true}
+                    title="AlphaGenome scoring in progress"
+                >
+                    ⟳ Scoring AlphaGenome ({progress.done}/{progress.total}
+                    )...
+                </button>
+            );
+        }
+        return (
+            <button
+                className="btn btn-default btn-xs"
+                disabled={true}
+                title="AlphaGenome scoring complete"
+            >
+                ✓ AlphaGenome Scored ({progress.total})
+            </button>
+        );
+    }
+}
+
 @observer
 export default class ResultsViewMutationMapper extends MutationMapper<
     IResultsViewMutationMapperProps
@@ -274,6 +327,9 @@ export default class ResultsViewMutationMapper extends MutationMapper<
                 enableCivic={this.props.enableCivic}
                 enableRevue={this.props.enableRevue}
                 enableAlphaGenome={getServerConfig().show_alphagenome}
+                customControls={
+                    <AlphaGenomeToolbarControl store={this.props.store} />
+                }
                 enableCustomDriver={this.props.enableCustomDriver}
                 totalNumberOfExons={this.totalExonNumber}
                 generateGenomeNexusHgvsgUrl={
