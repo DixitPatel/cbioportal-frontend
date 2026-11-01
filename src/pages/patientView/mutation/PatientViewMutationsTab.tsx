@@ -51,6 +51,57 @@ enum PlotTab {
     TIMELINE = 'timeline',
 }
 
+// Click-to-score control for AlphaGenome: the table renders cold with empty
+// 22px annotation slots (one spinner per row while scoring), and scoring
+// only starts when the user clicks through here. Variants are dispatched in
+// background chunks while rows hydrate in place.
+@observer
+export class AlphaGenomeScoreButton extends React.Component<
+    { store: PatientViewPageStore },
+    {}
+> {
+    public render() {
+        // Local dev only: Match existing pattern via serverConfig (show_alphagenome).
+        if (!getServerConfig().show_alphagenome) {
+            return null;
+        }
+        const store = this.props.store;
+        if (!store.isAlphaGenomeTriggered) {
+            return (
+                <button
+                    className="btn btn-default btn-xs"
+                    onClick={() => store.triggerAlphaGenomeScoring()}
+                    title="Score all mutations with AlphaGenome in the background"
+                >
+                    ⚡ Score AlphaGenome
+                </button>
+            );
+        }
+        const progress = store.alphaGenomeProgress;
+        if (store.isAlphaGenomeScoring) {
+            return (
+                <button
+                    className="btn btn-default btn-xs"
+                    disabled={true}
+                    title="AlphaGenome scoring in progress"
+                >
+                    ⟳ Scoring AlphaGenome ({progress.done}/{progress.total}
+                    )...
+                </button>
+            );
+        }
+        return (
+            <button
+                className="btn btn-default btn-xs"
+                disabled={true}
+                title="AlphaGenome scoring complete"
+            >
+                ✓ AlphaGenome Scored ({progress.total})
+            </button>
+        );
+    }
+}
+
 export const LOCAL_STORAGE_PLOT_TAB_KEY =
     'patient_view_mutations_tab__vaf_plot_choice';
 
@@ -246,6 +297,13 @@ export default class PatientViewMutationsTab extends React.Component<
                 </div>
                 <PatientViewMutationTable
                     dataStore={this.dataStore}
+                    // Rendered in the table toolbar below the mutation
+                    // count, alongside the filter and download controls.
+                    customControls={
+                        <AlphaGenomeScoreButton
+                            store={this.props.patientViewPageStore}
+                        />
+                    }
                     showGeneFilterMenu={
                         this.props.patientViewPageStore
                             .mutationTableShowGeneFilterMenu.result
@@ -337,9 +395,9 @@ export default class PatientViewMutationsTab extends React.Component<
                     enableHotspot={getServerConfig().show_hotspot}
                     enableCivic={getServerConfig().show_civic}
                     enableRevue={getServerConfig().show_revue}
-                    enableAlphaGenome={
-                        getServerConfig().show_alphagenome
-                    }
+                    // Local dev only: Match existing pattern via serverConfig (show_alphagenome).
+                    // Defaults to true in serverConfigDefaults.ts for local AlphaGenome development.
+                    enableAlphaGenome={getServerConfig().show_alphagenome}
                     columnVisibility={this.props.mutationTableColumnVisibility}
                     columnVisibilityProps={{
                         onColumnToggled: this.props

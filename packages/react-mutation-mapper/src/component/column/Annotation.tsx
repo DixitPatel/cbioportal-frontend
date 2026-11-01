@@ -114,7 +114,7 @@ export interface IAnnotation {
     hugoGeneSymbol: string;
     vue?: VUE;
     alphaGenome?: AlphaGenomeAnnotation;
-    alphaGenomeStatus: AlphaGenomeCellStatus;
+    alphaGenomeStatus?: AlphaGenomeCellStatus;
 }
 
 export const DEFAULT_ANNOTATION_DATA: IAnnotation = {
@@ -143,6 +143,10 @@ function getDefaultTumorType(): string {
 }
 
 const memoized: Map<string, IAnnotation> = new Map();
+
+export function clearAnnotationCache(): void {
+    memoized.clear();
+}
 export function getAnnotationData(
     mutation?: Mutation,
     oncoKbCancerGenes?: RemoteData<CancerGene[] | Error | undefined>,
@@ -155,7 +159,9 @@ export function getAnnotationData(
         { [genomicLocation: string]: VariantAnnotation } | undefined
     >,
     resolveTumorType: (mutation: Mutation) => string = getDefaultTumorType,
-    resolveEntrezGeneId: (mutation: Mutation) => number = getDefaultEntrezGeneId,
+    resolveEntrezGeneId: (
+        mutation: Mutation
+    ) => number = getDefaultEntrezGeneId,
     indexedAlphaGenomeAnnotations?: RemoteData<
         { [genomicLocation: string]: VariantAnnotation } | undefined
     >

@@ -153,7 +153,9 @@ export const sourceTooltipInfo = {
 export const alphaGenomeData: LegendDescription[] = [
     {
         legend: (
-            <span style={{ fontSize: 11, fontWeight: 'bold', color: '#d7301f' }}>
+            <span
+                style={{ fontSize: 11, fontWeight: 'bold', color: '#d7301f' }}
+            >
                 αG
             </span>
         ),
@@ -166,14 +168,16 @@ export const alphaGenomeData: LegendDescription[] = [
     },
     {
         legend: (
-            <span style={{ fontSize: 11, fontWeight: 'bold', color: '#fd8d3c' }}>
+            <span
+                style={{ fontSize: 11, fontWeight: 'bold', color: '#fd8d3c' }}
+            >
                 αG
             </span>
         ),
         description: (
             <span>
-                AlphaGenome moderate prediction (|quantile| ≥ 0.99 and raw
-                score above the moderate threshold)
+                AlphaGenome moderate prediction (|quantile| ≥ 0.99 and raw score
+                above the moderate threshold)
             </span>
         ),
     },
@@ -524,15 +528,13 @@ const AnnotationHeader: React.FunctionComponent<{
                     />
                 </DefaultTooltip>
             )}
-            {getServerConfig().show_alphagenome && props.showAlphaGenomeIcon && (
+            {props.showAlphaGenomeIcon && (
                 <DefaultTooltip
                     placement="top"
                     overlay={
                         <AnnotationHeaderTooltipCard
                             infoProps={
-                                sourceTooltipInfo[
-                                    AnnotationSources.ALPHAGENOME
-                                ]
+                                sourceTooltipInfo[AnnotationSources.ALPHAGENOME]
                             }
                             legendDescriptions={alphaGenomeData}
                         />
@@ -540,15 +542,23 @@ const AnnotationHeader: React.FunctionComponent<{
                 >
                     <span
                         style={{
-                            fontSize: 11,
-                            fontWeight: 'bold',
-                            height: 14,
-                            width: 14,
-                            marginLeft: 7,
-                            marginRight: 1,
+                            width: 22,
+                            height: 18,
+                            display: 'inline-flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            cursor: 'pointer',
                         }}
                     >
-                        αG
+                        <span
+                            style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: '#333',
+                            }}
+                        >
+                            αG
+                        </span>
                     </span>
                 </DefaultTooltip>
             )}

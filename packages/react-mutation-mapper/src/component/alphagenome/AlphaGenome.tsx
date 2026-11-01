@@ -1,5 +1,8 @@
 import React from 'react';
-import { DefaultTooltip } from 'cbioportal-frontend-commons';
+import {
+    DefaultTooltip,
+    placeArrowBottomLeft,
+} from 'cbioportal-frontend-commons';
 import { loaderIcon } from '../StatusHelpers';
 import {
     AlphaGenomeAnnotation,
@@ -68,10 +71,18 @@ export function alphaGenomeLabel(
     let best: AlphaGenomeLabel = undefined;
     for (const row of rows) {
         const tissueAgnostic = row.output_type === 'SPLICE_SITES';
-        if (!tissueAgnostic && ontologyCurie && row.ontology_curie !== ontologyCurie) {
+        if (
+            !tissueAgnostic &&
+            ontologyCurie &&
+            row.ontology_curie !== ontologyCurie
+        ) {
             continue;
         }
-        const level = scoreLevel(row.output_type, row.raw_score, row.quantile_score);
+        const level = scoreLevel(
+            row.output_type,
+            row.raw_score,
+            row.quantile_score
+        );
         if (level === 'strong') {
             return 'strong';
         }
@@ -123,7 +134,9 @@ function rowForOutputType(
         return match;
     }
     return typed.reduce((best, row) =>
-        Math.abs(row.raw_score ?? 0) > Math.abs(best.raw_score ?? 0) ? row : best
+        Math.abs(row.raw_score ?? 0) > Math.abs(best.raw_score ?? 0)
+            ? row
+            : best
     );
 }
 
@@ -172,7 +185,9 @@ function TissueBarChart(props: {
                                 textOverflow: 'ellipsis',
                                 verticalAlign: 'bottom',
                                 fontWeight:
-                                    curie === props.selectedCurie ? 'bold' : 'normal',
+                                    curie === props.selectedCurie
+                                        ? 'bold'
+                                        : 'normal',
                             }}
                         >
                             {curie}
@@ -210,14 +225,14 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
     ontologyCurie?: string;
 }> = props => {
     const rows = props.annotation.annotation?.scores ?? [];
-    const curies = availableCuries(rows);
+    const curies = React.useMemo(() => availableCuries(rows), [rows]);
     const [selectedType, setSelectedType] = React.useState<string>('RNA_SEQ');
     // Tissue exploration is local to the open tooltip and never writes back
     // to the table cell: picking a tissue with no passing score must not
     // blank the row's icon (the only way to reopen the tooltip).
-    const [selectedCurie, setSelectedCurie] = React.useState<string | undefined>(
-        undefined
-    );
+    const [selectedCurie, setSelectedCurie] = React.useState<
+        string | undefined
+    >(undefined);
     // Derive the effective tissue at render time: after a table sort the same
     // component instance can receive a different mutation, so a stored
     // selection that is no longer in this annotation must fall back instead
@@ -248,7 +263,8 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
                 }}
             >
                 <strong>
-                    AlphaGenome {props.annotation.annotation?.canonical_gene ?? ''}
+                    AlphaGenome{' '}
+                    {props.annotation.annotation?.canonical_gene ?? ''}
                 </strong>{' '}
                 ({props.annotation.annotation?.hg38_variant ?? ''})
             </div>
@@ -271,7 +287,11 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
                 </thead>
                 <tbody>
                     {OUTPUT_TYPES.map(outputType => {
-                        const row = rowForOutputType(rows, outputType, effectiveCurie);
+                        const row = rowForOutputType(
+                            rows,
+                            outputType,
+                            effectiveCurie
+                        );
                         if (!row) {
                             return null;
                         }
@@ -289,8 +309,12 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
                                     </a>
                                 </td>
                                 <td style={cellStyle}>{row.gene_name ?? ''}</td>
-                                <td style={cellStyle}>{row.track_name ?? ''}</td>
-                                <td style={cellStyle}>{formatScore(row.raw_score)}</td>
+                                <td style={cellStyle}>
+                                    {row.track_name ?? ''}
+                                </td>
+                                <td style={cellStyle}>
+                                    {formatScore(row.raw_score)}
+                                </td>
                                 <td style={cellStyle}>
                                     {formatScore(row.quantile_score)}
                                 </td>
@@ -322,7 +346,9 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
                 selectedCurie={effectiveCurie}
                 onSelect={selectCurie}
             />
-            <div style={{ marginTop: 8, fontStyle: 'italic' }}>{DISCLAIMER}</div>
+            <div style={{ marginTop: 8, fontStyle: 'italic' }}>
+                {DISCLAIMER}
+            </div>
         </div>
     );
 };
@@ -351,7 +377,9 @@ export const AlphaGenomeCell: React.FunctionComponent<{
     }
     return (
         <DefaultTooltip
-            placement="bottom"
+            placement="topLeft"
+            trigger={['hover', 'focus']}
+            onPopupAlign={placeArrowBottomLeft}
             overlay={
                 <AlphaGenomeTooltipContent
                     annotation={props.annotation!}
@@ -362,13 +390,20 @@ export const AlphaGenomeCell: React.FunctionComponent<{
         >
             <span
                 className={`${annotationStyles['annotation-item']}`}
-                style={{ display: 'inline-flex' }}
+                style={{
+                    width: 22,
+                    height: 18,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                }}
             >
                 <span
-                    title={`AlphaGenome: ${label}`}
                     style={{
-                        fontSize: 11,
-                        fontWeight: 'bold',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        lineHeight: '14px',
                         color: label === 'strong' ? '#d7301f' : '#fd8d3c',
                     }}
                 >
