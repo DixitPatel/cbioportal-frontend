@@ -147,6 +147,28 @@ const memoized: Map<string, IAnnotation> = new Map();
 export function clearAnnotationCache(): void {
     memoized.clear();
 }
+
+function getAlphaGenomeData(
+    mutation: Mutation,
+    indexedAlphaGenomeAnnotations?: RemoteData<
+        { [genomicLocation: string]: VariantAnnotation } | undefined
+    >
+) {
+    return {
+        alphaGenome:
+            indexedAlphaGenomeAnnotations?.isComplete &&
+            indexedAlphaGenomeAnnotations.result
+                ? getVariantAnnotation(
+                      mutation,
+                      indexedAlphaGenomeAnnotations.result
+                  )?.alpha_genome
+                : undefined,
+        alphaGenomeStatus: indexedAlphaGenomeAnnotations
+            ? indexedAlphaGenomeAnnotations.status
+            : 'complete',
+    };
+}
+
 export function getAnnotationData(
     mutation?: Mutation,
     oncoKbCancerGenes?: RemoteData<CancerGene[] | Error | undefined>,
@@ -176,13 +198,21 @@ export function getAnnotationData(
             oncoKbData?.isComplete &&
             civicGenes?.isComplete &&
             civicVariants?.isComplete &&
-            indexedVariantAnnotations?.isComplete &&
-            indexedAlphaGenomeAnnotations?.isComplete;
+            indexedVariantAnnotations?.isComplete;
 
         if (memoize) {
             key = JSON.stringify(mutation) + !!usingPublicOncoKbInstance;
             const val = memoized.get(key);
             if (val) {
+                if (indexedAlphaGenomeAnnotations) {
+                    Object.assign(
+                        val,
+                        getAlphaGenomeData(
+                            mutation,
+                            indexedAlphaGenomeAnnotations
+                        )
+                    );
+                }
                 return val;
             }
         }
@@ -267,17 +297,7 @@ export function getAnnotationData(
                           indexedVariantAnnotations.result
                       )?.annotation_summary?.vues
                     : undefined,
-            alphaGenome:
-                indexedAlphaGenomeAnnotations?.isComplete &&
-                indexedAlphaGenomeAnnotations.result
-                    ? getVariantAnnotation(
-                          mutation,
-                          indexedAlphaGenomeAnnotations.result
-                      )?.alpha_genome
-                    : undefined,
-            alphaGenomeStatus: indexedAlphaGenomeAnnotations
-                ? indexedAlphaGenomeAnnotations.status
-                : 'complete',
+            ...getAlphaGenomeData(mutation, indexedAlphaGenomeAnnotations),
         };
 
         // oncoKbData may exist but it might be an instance of Error, in that case we flag the status as error
