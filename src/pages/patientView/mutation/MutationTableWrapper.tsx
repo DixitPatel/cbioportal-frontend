@@ -170,8 +170,7 @@ export default class MutationTableWrapper extends React.Component<
                         <FeatureInstruction content={TABLE_FEATURE_INSTRUCTION}>
                             <PatientViewMutationTable
                                 dataStore={this.props.dataStore}
-                                // Rendered in the table toolbar below the
-                                // mutation count, with the other controls.
+                                // Rendered in the table toolbar below the mutation count
                                 customControls={
                                     <AlphaGenomeScoreButton
                                         store={this.pageStore}
@@ -266,7 +265,7 @@ export default class MutationTableWrapper extends React.Component<
                                 enableCivic={getServerConfig().show_civic}
                                 enableRevue={getServerConfig().show_revue}
                                 // Local dev only: Match existing pattern via serverConfig (show_alphagenome).
-                                // Defaults to true in serverConfigDefaults.ts for local AlphaGenome development.
+                                // Defaults to true in serverConfigDefaults.ts for local AlphaGenome development — TBD to reverify
                                 enableAlphaGenome={
                                     getServerConfig().show_alphagenome
                                 }

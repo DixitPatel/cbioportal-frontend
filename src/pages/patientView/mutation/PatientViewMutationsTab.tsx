@@ -51,17 +51,14 @@ enum PlotTab {
     TIMELINE = 'timeline',
 }
 
-// Click-to-score control for AlphaGenome: the table renders cold with empty
-// 22px annotation slots (one spinner per row while scoring), and scoring
-// only starts when the user clicks through here. Variants are dispatched in
-// background chunks while rows hydrate in place.
+// Click triggers batched scoring for variants
 @observer
 export class AlphaGenomeScoreButton extends React.Component<
     { store: PatientViewPageStore },
     {}
 > {
     public render() {
-        // Local dev only: Match existing pattern via serverConfig (show_alphagenome).
+        // Gate on serverConfig, defaulting on for local dev
         if (!getServerConfig().show_alphagenome) {
             return null;
         }
@@ -297,8 +294,7 @@ export default class PatientViewMutationsTab extends React.Component<
                 </div>
                 <PatientViewMutationTable
                     dataStore={this.dataStore}
-                    // Rendered in the table toolbar below the mutation
-                    // count, alongside the filter and download controls.
+                    // Rendered in the table toolbar below the mutation count, alongside the filter and download
                     customControls={
                         <AlphaGenomeScoreButton
                             store={this.props.patientViewPageStore}
@@ -396,7 +392,7 @@ export default class PatientViewMutationsTab extends React.Component<
                     enableCivic={getServerConfig().show_civic}
                     enableRevue={getServerConfig().show_revue}
                     // Local dev only: Match existing pattern via serverConfig (show_alphagenome).
-                    // Defaults to true in serverConfigDefaults.ts for local AlphaGenome development.
+                    // Defaults to true in serverConfigDefaults.ts for local AlphaGenome development — TBD to reverify
                     enableAlphaGenome={getServerConfig().show_alphagenome}
                     columnVisibility={this.props.mutationTableColumnVisibility}
                     columnVisibilityProps={{

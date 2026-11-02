@@ -24,12 +24,7 @@ export type AlphaGenomeLabel = 'strong' | 'moderate' | undefined;
 
 export const DISCLAIMER = 'Model prediction, not experimental evidence.';
 
-/**
- * Dual-gate UI label (project-defined thresholds): a score only counts when
- * |quantile_score| >= 0.99 AND the raw score passes its minimum
- * (|LFC| >= 0.5 strong / >= 0.1 moderate for RNA_SEQ;
- * delta >= 0.5 strong / >= 0.2 moderate for splicing scorers).
- */
+/** Strong/moderate label needs |quantile| >= 0.99 plus raw-score threshold */
 export function scoreLevel(
     outputType: string | undefined,
     rawScore: number | undefined | null,
@@ -61,7 +56,7 @@ export function scoreLevel(
 
 /**
  * Cell label for the selected tissue: the best dual-gate level across rows
- * matching the tissue, plus tissue-independent SPLICE_SITES rows.
+ * matching the tissue, plus tissue-independent SPLICE_SITES rows
  */
 export function alphaGenomeLabel(
     annotation: AlphaGenomeAnnotation | undefined,
@@ -227,16 +222,11 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
     const rows = props.annotation.annotation?.scores ?? [];
     const curies = React.useMemo(() => availableCuries(rows), [rows]);
     const [selectedType, setSelectedType] = React.useState<string>('RNA_SEQ');
-    // Tissue exploration is local to the open tooltip and never writes back
-    // to the table cell: picking a tissue with no passing score must not
-    // blank the row's icon (the only way to reopen the tooltip).
+    // Picking a tissue with no passing score must not blank the row's icon
     const [selectedCurie, setSelectedCurie] = React.useState<
         string | undefined
     >(undefined);
-    // Derive the effective tissue at render time: after a table sort the same
-    // component instance can receive a different mutation, so a stored
-    // selection that is no longer in this annotation must fall back instead
-    // of yielding an empty label/tooltip.
+    // Fall back when a stored tissue is absent post-sort
     const valid = (curie: string | undefined) =>
         curie && curies.includes(curie) ? curie : undefined;
     const effectiveCurie =
@@ -361,15 +351,11 @@ export const AlphaGenomeCell: React.FunctionComponent<{
     ontologyCurie?: string;
     status?: AlphaGenomeCellStatus;
 }> = props => {
-    // The icon label is stable: it follows the study tissue (or the best
-    // tissue overall), never the tooltip's transient exploration selection,
-    // so exploring a tissue with no passing score cannot blank the row.
     const displayCurie =
         props.ontologyCurie ?? defaultCurieForCancerType(props.cancerType);
     const label = alphaGenomeLabel(props.annotation, displayCurie);
     if (!label) {
-        // While a background scoring queue is in flight, hold the pinned
-        // 22px slot with an in-place spinner instead of an empty placeholder.
+        // Hold the 22px slot with a spinner while scoring
         if (props.status === 'pending') {
             return loaderIcon('pull-left');
         }

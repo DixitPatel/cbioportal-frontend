@@ -435,8 +435,7 @@ interface IResultsViewExclusionSettings {
 
 const ONCOPRINT_COLOR_CONFIG = 'clinicalTracksColorConfig';
 
-// Background AlphaGenome scoring queue: variants are dispatched to Genome
-// Nexus in chunks of this size so cold-cache cohorts never block page load.
+// Background AlphaGenome scoring queue: variants are dispatched to Genome Nexus in chunks of this size
 export const ALPHA_GENOME_SCORING_CHUNK_SIZE = 16;
 
 export type AlphaGenomeScoringProgress = {
@@ -5481,15 +5480,15 @@ export class ResultsViewPageStore extends AnalysisStore
         undefined
     );
 
-    // Decoupled AlphaGenome trigger state. The mutations table renders cold
-    // (empty 22px placeholders) until the user starts background scoring via
-    // the toolbar control; rows then hydrate chunk by chunk without a page
-    // load stall or 504 from one monolithic request.
+    // User started background scoring via toolbar
     @observable public isAlphaGenomeTriggered = false;
+    // Scoring fetch currently in flight
     @observable public isAlphaGenomeScoring = false;
+    // Hydrated annotations by genomic location
     @observable.shallow public streamingAlphaGenomeAnnotations: {
         [genomicLocation: string]: VariantAnnotation;
     } = {};
+    // Scored-vs-total count for progress display
     @observable public alphaGenomeProgress: AlphaGenomeScoringProgress = {
         done: 0,
         total: 0,
@@ -5503,9 +5502,6 @@ export class ResultsViewPageStore extends AnalysisStore
         ) {
             return;
         }
-        // All pre-fetch writes happen here in the action: the remoteData
-        // invoke below must stay read-only until its first await so MobX
-        // never sees an observable write inside a derivation.
         this.isAlphaGenomeTriggered = true;
         this.isAlphaGenomeScoring = true;
         this.streamingAlphaGenomeAnnotations = {};
@@ -5517,12 +5513,7 @@ export class ResultsViewPageStore extends AnalysisStore
         };
     }
 
-    // AlphaGenome annotations are fetched separately so cold-cache scoring
-    // does not delay the shared Genome Nexus fields above. The invoke stays
-    // idle (result undefined) until triggerAlphaGenomeScoring flips
-    // isAlphaGenomeTriggered; MobX re-invokes because the flag is read here.
-    // Variants are dispatched sequentially in chunks of 16, merging each
-    // chunk into streamingAlphaGenomeAnnotations for progress tracking.
+    // Variants are dispatched sequentially in chunks of 16, merging each chunk into streamingAlphaGenomeAnnotations for progress tracking
     readonly indexedAlphaGenomeAnnotations = remoteData<
         { [genomicLocation: string]: VariantAnnotation } | undefined
     >(
@@ -5569,11 +5560,6 @@ export class ResultsViewPageStore extends AnalysisStore
                                 );
                                 Object.assign(merged, indexed);
                             }
-                            // Re-armed here (in addition to the trigger
-                            // action) so a mutations refetch that re-invokes
-                            // this fetch also reports scoring in flight.
-                            // This observable is never read above, so the
-                            // write cannot re-trigger the fetch.
                             this.isAlphaGenomeScoring = true;
                             this.alphaGenomeProgress = {
                                 done,

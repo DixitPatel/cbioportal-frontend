@@ -314,8 +314,7 @@ export function buildCohortIdsFromNavCaseIds(
     });
 }
 
-// AlphaGenome variants are dispatched to Genome Nexus in chunks of this size
-// so cold-cache scoring never blocks page load with one monolithic request.
+// Score in chunks to not stall page load
 export const ALPHA_GENOME_SCORING_CHUNK_SIZE = 16;
 
 export type AlphaGenomeScoringProgress = {
@@ -1944,10 +1943,7 @@ export class PatientViewPageStore {
         },
     });
 
-    // Click-to-score trigger state for AlphaGenome. The mutations table
-    // renders cold (empty 22px placeholders, one spinner per row while
-    // scoring) until the user starts background scoring from the mutations
-    // tab; rows then hydrate chunk by chunk without a page load stall.
+    // Click triggers batched scoring for variants
     @observable public isAlphaGenomeTriggered = false;
     @observable public isAlphaGenomeScoring = false;
     @observable.shallow public streamingAlphaGenomeAnnotations: {
@@ -1960,17 +1956,13 @@ export class PatientViewPageStore {
 
     @action.bound
     public triggerAlphaGenomeScoring(): void {
-        // Local dev only: Match existing pattern via serverConfig (show_alphagenome).
-        // Defaults to true in serverConfigDefaults.ts for local AlphaGenome development.
+        // Gate on serverConfig, defaulting on for local dev — TBD to remove before PR merge
         if (
             !getServerConfig().show_alphagenome ||
             this.isAlphaGenomeTriggered
         ) {
             return;
         }
-        // All pre-fetch writes happen here in the action: the remoteData
-        // invoke below must stay read-only until its first await so MobX
-        // never sees an observable write inside a derivation.
         this.isAlphaGenomeTriggered = true;
         this.isAlphaGenomeScoring = true;
         this.streamingAlphaGenomeAnnotations = {};
@@ -2023,11 +2015,6 @@ export class PatientViewPageStore {
                             );
                             Object.assign(merged, indexed);
                         }
-                        // Re-armed here (in addition to the trigger
-                        // action) so a mutations refetch that re-invokes
-                        // this fetch also reports scoring in flight.
-                        // This observable is never read above, so the
-                        // write cannot re-trigger the fetch.
                         this.isAlphaGenomeScoring = true;
                         this.alphaGenomeProgress = {
                             done,
