@@ -22,9 +22,7 @@ function mockStore(overrides: {
 
 describe('AlphaGenomeScoreButton', () => {
     beforeEach(() => {
-        // Sample-first: the button renders even when the backend flag is
-        // off or absent.
-        setServerConfig({ show_alphagenome: false });
+        setServerConfig({ show_alphagenome: true });
     });
 
     it('offers scoring with a click when not yet triggered', () => {
