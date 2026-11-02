@@ -9,7 +9,6 @@ import {
     AlphaGenomeScore,
 } from 'genome-nexus-ts-api-client';
 import annotationStyles from '../column/annotation.module.scss';
-import { defaultCurieForCancerType } from './oncotreeToUberon';
 
 export const OUTPUT_TYPES = [
     'RNA_SEQ',
@@ -24,75 +23,27 @@ export type AlphaGenomeLabel = 'strong' | 'moderate' | undefined;
 
 export const DISCLAIMER = 'Model prediction, not experimental evidence.';
 
-/** Strong/moderate label needs |quantile| >= 0.99 plus raw-score threshold */
-export function scoreLevel(
-    outputType: string | undefined,
-    rawScore: number | undefined | null,
-    quantileScore: number | undefined | null
+/**
+ * Reads the precomputed dual-gate score_level ('strong' | 'moderate' | null)
+ * returned by the AlphaGenome sidecar
+ */
+export function alphaGenomeLabel(
+    annotation: AlphaGenomeAnnotation | undefined
 ): AlphaGenomeLabel {
-    if (rawScore == null || quantileScore == null) {
-        return undefined;
-    }
-    if (Math.abs(quantileScore) < 0.99) {
-        return undefined;
-    }
-    if (outputType === 'RNA_SEQ') {
-        if (Math.abs(rawScore) >= 0.5) {
-            return 'strong';
-        }
-        if (Math.abs(rawScore) >= 0.1) {
-            return 'moderate';
-        }
-        return undefined;
-    }
-    if (rawScore >= 0.5) {
-        return 'strong';
-    }
-    if (rawScore >= 0.2) {
-        return 'moderate';
+    const level = annotation?.annotation?.score_level;
+    if (level === 'strong' || level === 'moderate') {
+        return level;
     }
     return undefined;
 }
 
-/**
- * Cell label for the selected tissue: the best dual-gate level across rows
- * matching the tissue, plus tissue-independent SPLICE_SITES rows
- */
-export function alphaGenomeLabel(
-    annotation: AlphaGenomeAnnotation | undefined,
-    ontologyCurie?: string
-): AlphaGenomeLabel {
-    const rows = annotation?.annotation?.scores ?? [];
-    let best: AlphaGenomeLabel = undefined;
-    for (const row of rows) {
-        const tissueAgnostic = row.output_type === 'SPLICE_SITES';
-        if (
-            !tissueAgnostic &&
-            ontologyCurie &&
-            row.ontology_curie !== ontologyCurie
-        ) {
-            continue;
-        }
-        const level = scoreLevel(
-            row.output_type,
-            row.raw_score,
-            row.quantile_score
-        );
-        if (level === 'strong') {
-            return 'strong';
-        }
-        if (level === 'moderate') {
-            best = 'moderate';
-        }
-    }
-    return best;
-}
-
 export function sortValue(
-    annotation: AlphaGenomeAnnotation | undefined,
-    ontologyCurie?: string
+    annotation: AlphaGenomeAnnotation | undefined
 ): number {
-    const label = alphaGenomeLabel(annotation, ontologyCurie);
+    if (!annotation?.annotation) {
+        return 3;
+    }
+    const label = alphaGenomeLabel(annotation);
     return label === 'strong' ? 0 : label === 'moderate' ? 1 : 2;
 }
 
@@ -217,8 +168,6 @@ function TissueBarChart(props: {
 
 export const AlphaGenomeTooltipContent: React.FunctionComponent<{
     annotation: AlphaGenomeAnnotation;
-    cancerType?: string;
-    ontologyCurie?: string;
 }> = props => {
     const rows = props.annotation.annotation?.scores ?? [];
     const curies = React.useMemo(() => availableCuries(rows), [rows]);
@@ -234,11 +183,7 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
     // Fall back when a stored tissue is absent post-sort
     const valid = (curie: string | undefined) =>
         curie && curies.includes(curie) ? curie : undefined;
-    const effectiveCurie =
-        valid(selectedCurie) ??
-        valid(props.ontologyCurie) ??
-        defaultCurieForCancerType(props.cancerType) ??
-        curies[0];
+    const effectiveCurie = valid(selectedCurie) ?? curies[0];
     const selectCurie = (curie: string) => {
         if (curies.includes(curie)) {
             setSelectedCurie(curie);
@@ -354,32 +299,28 @@ export type AlphaGenomeCellStatus = 'pending' | 'error' | 'complete';
 
 export const AlphaGenomeCell: React.FunctionComponent<{
     annotation?: AlphaGenomeAnnotation;
-    cancerType?: string;
-    ontologyCurie?: string;
     status?: AlphaGenomeCellStatus;
 }> = props => {
-    const displayCurie =
-        props.ontologyCurie ?? defaultCurieForCancerType(props.cancerType);
-    const label = alphaGenomeLabel(props.annotation, displayCurie);
-    if (!label) {
+    if (!props.annotation?.annotation) {
         // Hold the 22px slot with a spinner while scoring
         if (props.status === 'pending') {
             return loaderIcon('pull-left');
         }
         return <span className={`${annotationStyles['annotation-item']}`} />;
     }
+    const label = alphaGenomeLabel(props.annotation);
+    const badgeColor =
+        label === 'strong'
+            ? '#d7301f'
+            : label === 'moderate'
+            ? '#fd8d3c'
+            : '#6baed6';
     return (
         <DefaultTooltip
             placement="topLeft"
             trigger={['hover', 'focus']}
             onPopupAlign={placeArrowBottomLeft}
-            overlay={
-                <AlphaGenomeTooltipContent
-                    annotation={props.annotation!}
-                    cancerType={props.cancerType}
-                    ontologyCurie={displayCurie}
-                />
-            }
+            overlay={<AlphaGenomeTooltipContent annotation={props.annotation} />}
         >
             <span
                 className={`${annotationStyles['annotation-item']}`}
@@ -397,7 +338,7 @@ export const AlphaGenomeCell: React.FunctionComponent<{
                         fontSize: 10,
                         fontWeight: 700,
                         lineHeight: '14px',
-                        color: label === 'strong' ? '#d7301f' : '#fd8d3c',
+                        color: badgeColor,
                     }}
                 >
                     αG

@@ -5,13 +5,15 @@ import {
     AlphaGenomeCell,
     AlphaGenomeTooltipContent,
     alphaGenomeLabel,
-    scoreLevel,
     sortValue,
     DISCLAIMER,
 } from './AlphaGenome';
 import { AlphaGenomeAnnotation } from 'genome-nexus-ts-api-client';
 
-function annotationWithScores(scores: any[]): AlphaGenomeAnnotation {
+function annotationWithScores(
+    scores: any[],
+    scoreLevel: 'strong' | 'moderate' | null = 'strong'
+): AlphaGenomeAnnotation {
     return {
         license: 'test',
         annotation: {
@@ -22,6 +24,7 @@ function annotationWithScores(scores: any[]): AlphaGenomeAnnotation {
             canonical_gene_id: 'ENSG00000157764',
             canonical_gene: 'BRAF',
             merged_splicing_score: 0.15,
+            score_level: scoreLevel,
             scores,
         },
     } as AlphaGenomeAnnotation;
@@ -46,53 +49,33 @@ function row(
     };
 }
 
-describe('AlphaGenome dual-gate labels', () => {
-    it('returns undefined when quantile gate fails', () => {
-        assert.isUndefined(scoreLevel('RNA_SEQ', 0.9, 0.5));
+describe('AlphaGenome sidecar score_level badges', () => {
+    it('reads score_level exclusively from annotation', () => {
+        const strong = annotationWithScores([], 'strong');
+        const moderate = annotationWithScores([], 'moderate');
+        const low = annotationWithScores([], null);
+        assert.equal(alphaGenomeLabel(strong), 'strong');
+        assert.equal(alphaGenomeLabel(moderate), 'moderate');
+        assert.isUndefined(alphaGenomeLabel(low));
+        assert.isUndefined(alphaGenomeLabel(undefined));
     });
 
-    it('grades RNA_SEQ by |LFC|', () => {
-        assert.equal(scoreLevel('RNA_SEQ', 0.612, 0.994), 'strong');
-        assert.equal(scoreLevel('RNA_SEQ', -0.612, -0.994), 'strong');
-        assert.equal(scoreLevel('RNA_SEQ', 0.2, 0.995), 'moderate');
-        assert.isUndefined(scoreLevel('RNA_SEQ', 0.05, 0.999));
-    });
-
-    it('grades splicing deltas without abs', () => {
-        assert.equal(scoreLevel('SPLICE_SITES', 0.5, 0.99), 'strong');
-        assert.equal(scoreLevel('SPLICE_SITE_USAGE', 0.2, 0.999), 'moderate');
-        assert.isUndefined(scoreLevel('SPLICE_JUNCTIONS', 0.1, 0.999));
-    });
-
-    it('prefers tissue rows but accepts tissue-independent SPLICE_SITES', () => {
-        const annotation = annotationWithScores([
-            row('RNA_SEQ', 0.9, 0.999, 'UBERON:0001264'),
-            row('SPLICE_SITES', 0.6, 0.999, 'UBERON:0002048'),
-        ]);
-        assert.equal(
-            alphaGenomeLabel(annotation, 'UBERON:0000955'),
+    it('sorts strong before moderate before scored-null before unscored', () => {
+        const strong = annotationWithScores(
+            [row('SPLICE_SITES', 0.6, 0.999)],
             'strong'
         );
-        assert.equal(alphaGenomeLabel(annotation, undefined), 'strong');
-    });
-
-    it('returns undefined without a passing row', () => {
-        const annotation = annotationWithScores([
-            row('RNA_SEQ', 0.9, 0.5, 'UBERON:0001264'),
-        ]);
-        assert.isUndefined(alphaGenomeLabel(annotation, 'UBERON:0001264'));
-        assert.isUndefined(alphaGenomeLabel(undefined, 'UBERON:0001264'));
-    });
-
-    it('sorts strong before moderate before none', () => {
-        const strong = annotationWithScores([
-            row('SPLICE_SITES', 0.6, 0.999),
-        ]);
-        const moderate = annotationWithScores([
-            row('SPLICE_SITES', 0.3, 0.999),
-        ]);
+        const moderate = annotationWithScores(
+            [row('SPLICE_SITES', 0.3, 0.999)],
+            'moderate'
+        );
+        const low = annotationWithScores(
+            [row('SPLICE_SITES', 0.05, 0.5)],
+            null
+        );
         assert.isBelow(sortValue(strong), sortValue(moderate));
-        assert.isBelow(sortValue(moderate), sortValue(undefined));
+        assert.isBelow(sortValue(moderate), sortValue(low));
+        assert.isBelow(sortValue(low), sortValue(undefined));
     });
 
     it('always carries the non-clinical disclaimer', () => {
@@ -119,12 +102,9 @@ describe('AlphaGenomeCell across table sorts', () => {
         assert.include(container.textContent ?? '', 'αG');
     });
 
-    it('shows a spinner in the pinned slot while scoring with no label', () => {
-        const annotation = annotationWithScores([
-            row('RNA_SEQ', 0.9, 0.5, 'CL:0000001'),
-        ]);
+    it('shows a spinner in the pinned slot while scoring with no annotation', () => {
         const { container } = render(
-            <AlphaGenomeCell annotation={annotation} status="pending" />
+            <AlphaGenomeCell annotation={undefined} status="pending" />
         );
         assert.notInclude(container.textContent ?? '', 'αG');
         assert.isNotNull(
@@ -133,12 +113,9 @@ describe('AlphaGenomeCell across table sorts', () => {
         );
     });
 
-    it('renders an empty pinned placeholder when idle with no label', () => {
-        const annotation = annotationWithScores([
-            row('RNA_SEQ', 0.9, 0.5, 'CL:0000001'),
-        ]);
+    it('renders an empty pinned placeholder when idle with no annotation', () => {
         const { container } = render(
-            <AlphaGenomeCell annotation={annotation} status="complete" />
+            <AlphaGenomeCell annotation={undefined} status="complete" />
         );
         assert.notInclude(container.textContent ?? '', 'αG');
         assert.isNull(container.querySelector('.fa-spinner'));
@@ -146,6 +123,19 @@ describe('AlphaGenomeCell across table sorts', () => {
             container.querySelector('.annotation-item'),
             'expected the pinned 22px placeholder slot'
         );
+    });
+
+    it('renders a light blue badge when scored with null score_level', () => {
+        const annotation = annotationWithScores(
+            [row('RNA_SEQ', 0.9, 0.5, 'CL:0000001')],
+            null
+        );
+        const { container, getByText } = render(
+            <AlphaGenomeCell annotation={annotation} status="complete" />
+        );
+        assert.include(container.textContent ?? '', 'αG');
+        const badge = getByText('αG') as HTMLElement;
+        assert.equal(badge.style.color, 'rgb(107, 174, 214)');
     });
 
     it('keeps the chart section when switching to the SPLICE_SITES output type', () => {

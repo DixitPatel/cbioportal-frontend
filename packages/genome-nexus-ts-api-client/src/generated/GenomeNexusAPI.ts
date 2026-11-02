@@ -605,6 +605,8 @@ export type AlphaGenome = {
 
         'model_version': string
 
+        'score_level' ? : 'strong' | 'moderate' | null
+
         'scored_interval': string
 
         'scores': Array < AlphaGenomeScore >
