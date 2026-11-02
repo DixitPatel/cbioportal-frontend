@@ -17,6 +17,7 @@ import PatientViewMutationTable from './PatientViewMutationTable';
 import { GeneFilterOption } from './GeneFilterMenu';
 import { isFusion } from '../../../shared/lib/MutationUtils';
 import PatientViewUrlWrapper from '../PatientViewUrlWrapper';
+import AskMuseFloatingWindow from './AskMuseFloatingWindow';
 import WindowStore from '../../../shared/components/window/WindowStore';
 import VAFChartWrapper from 'pages/patientView/timeline/VAFChartWrapper';
 import TimelineWrapper from 'pages/patientView/timeline/TimelineWrapper';
@@ -55,8 +56,21 @@ enum PlotTab {
 @observer
 export class AlphaGenomeScoreButton extends React.Component<
     { store: PatientViewPageStore },
-    {}
+    { isAskMuseOpen: boolean }
 > {
+    constructor(props: { store: PatientViewPageStore }) {
+        super(props);
+        this.state = { isAskMuseOpen: false };
+    }
+
+    private toggleAskMuse = () => {
+        this.setState(prev => ({ isAskMuseOpen: !prev.isAskMuseOpen }));
+    };
+
+    private closeAskMuse = () => {
+        this.setState({ isAskMuseOpen: false });
+    };
+
     public render() {
         // Gate on serverConfig, defaulting on for local dev
         if (!getServerConfig().show_alphagenome) {
@@ -88,13 +102,29 @@ export class AlphaGenomeScoreButton extends React.Component<
             );
         }
         return (
-            <button
-                className="btn btn-default btn-xs"
-                disabled={true}
-                title="AlphaGenome scoring complete"
-            >
-                ✓ AlphaGenome Scored ({progress.total})
-            </button>
+            <>
+                <button
+                    className="btn btn-default btn-xs"
+                    disabled={true}
+                    title="AlphaGenome scoring complete"
+                >
+                    ✓ AlphaGenome Scored ({progress.total})
+                </button>
+                <button
+                    className="btn btn-default btn-xs"
+                    style={{ marginLeft: 6 }}
+                    onClick={this.toggleAskMuse}
+                    title="Open Ask Muse Co-Pilot Floating Window"
+                >
+                    🧬 Ask Muse
+                </button>
+                {this.state.isAskMuseOpen && (
+                    <AskMuseFloatingWindow
+                        store={store}
+                        onClose={this.closeAskMuse}
+                    />
+                )}
+            </>
         );
     }
 }

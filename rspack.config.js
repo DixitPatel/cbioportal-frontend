@@ -469,6 +469,15 @@ var config = {
             publicPath: '/',
             stats: 'errors-only',
         },
+        proxy: [
+            {
+                context: ['/api/proxy/localhost:38080', '/proxy/localhost:38080'],
+                target: 'http://localhost:38080',
+                pathRewrite: { '^/(api/)?proxy/localhost:38080': '' },
+                changeOrigin: true,
+                secure: false,
+            },
+        ],
     },
 };
 
