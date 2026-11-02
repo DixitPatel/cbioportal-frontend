@@ -3,6 +3,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react';
 import React from 'react';
 import {
     AlphaGenomeCell,
+    AlphaGenomeTooltipContent,
     alphaGenomeLabel,
     scoreLevel,
     sortValue,
@@ -144,6 +145,80 @@ describe('AlphaGenomeCell across table sorts', () => {
         assert.isNotNull(
             container.querySelector('.annotation-item'),
             'expected the pinned 22px placeholder slot'
+        );
+    });
+
+    it('keeps the chart section when switching to the SPLICE_SITES output type', () => {
+        // SPLICE_SITES rows carry no tissue: the section must fall back to a
+        // track-bucketed bar instead of collapsing the tooltip content.
+        const annotation = annotationWithScores([
+            row('RNA_SEQ', 0.9, 0.995, 'CL:0000001'),
+            row('SPLICE_SITES', 0.8, 0.995),
+        ]);
+        const { container, getByText, queryByText } = render(
+            <AlphaGenomeTooltipContent annotation={annotation} />
+        );
+        const scroller = () =>
+            Array.from(container.querySelectorAll('div')).find(
+                d =>
+                    (d as HTMLElement).style.maxHeight === '168px' &&
+                    (d as HTMLElement).style.minHeight === '168px'
+            );
+        assert.isNotNull(queryByText('RNA_SEQ by tissue'));
+        assert.isDefined(
+            scroller(),
+            'expected a fixed-height chart region before switching'
+        );
+        assert.isNull(queryByText('SPLICE_SITES by tissue'));
+        fireEvent.click(getByText('SPLICE_SITES', { selector: 'a' }));
+        assert.isNotNull(
+            queryByText('SPLICE_SITES by tissue'),
+            'expected the chart section to persist after switching output type'
+        );
+        assert.isDefined(
+            scroller(),
+            'expected the chart region to keep its fixed height after switching'
+        );
+    });
+
+    it('keeps the chart section for SPLICE_SITES rows without tissue or track names', () => {
+        // Bare-minimum splice rows (neither ontology_curie nor track_name)
+        // must still render a bar: the output type itself is the fallback
+        // label, so switching types never empties or resizes the section.
+        const annotation = annotationWithScores([
+            {
+                output_type: 'SPLICE_SITES',
+                variant_scorer: 'SpliceSiteScorer',
+                gene_id: 'ENSG00000157764',
+                gene_name: 'BRAF',
+                track_name: null,
+                ontology_curie: null,
+                biosample_name: null,
+                raw_score: 0.8,
+                quantile_score: 0.995,
+            },
+        ]);
+        const { container, getByText, queryByText } = render(
+            <AlphaGenomeTooltipContent annotation={annotation} />
+        );
+        const scroller = () =>
+            Array.from(container.querySelectorAll('div')).find(
+                d =>
+                    (d as HTMLElement).style.maxHeight === '168px' &&
+                    (d as HTMLElement).style.minHeight === '168px'
+            );
+        assert.isDefined(
+            scroller(),
+            'expected a fixed-height chart region on initial render'
+        );
+        fireEvent.click(getByText('SPLICE_SITES', { selector: 'a' }));
+        assert.isNotNull(
+            queryByText('SPLICE_SITES by tissue'),
+            'expected the chart section to persist without tissue or track names'
+        );
+        assert.isDefined(
+            scroller(),
+            'expected the chart region to keep its fixed height after switching'
         );
     });
 

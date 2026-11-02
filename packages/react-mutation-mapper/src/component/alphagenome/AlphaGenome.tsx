@@ -141,21 +141,22 @@ function TissueBarChart(props: {
     selectedCurie?: string;
     onSelect: (curie: string) => void;
 }): JSX.Element | null {
-    if (props.outputType === 'SPLICE_SITES') {
-        return null;
-    }
-    const byCurie = new Map<string, number>();
+    const byLabel = new Map<string, number>();
     for (const row of props.rows) {
-        if (row.output_type !== props.outputType || !row.ontology_curie) {
+        if (row.output_type !== props.outputType) {
             continue;
         }
-        const current = byCurie.get(row.ontology_curie);
+        // Rows without a tissue curie (e.g. SPLICE_SITES) fall back to track
+        // name or output type so switching types never collapses the chart
+        const label =
+            row.ontology_curie ?? row.track_name ?? props.outputType;
+        const current = byLabel.get(label);
         const value = Math.abs(row.raw_score ?? 0);
         if (current === undefined || value > current) {
-            byCurie.set(row.ontology_curie, value);
+            byLabel.set(label, value);
         }
     }
-    const entries = Array.from(byCurie.entries());
+    const entries = Array.from(byLabel.entries());
     if (entries.length === 0) {
         return null;
     }
@@ -165,11 +166,11 @@ function TissueBarChart(props: {
             <div>
                 <strong>{props.outputType} by tissue</strong>
             </div>
-            <div style={{ maxHeight: 168, overflowY: 'auto' }}>
-                {entries.map(([curie, value]) => (
+            <div style={{ maxHeight: 168, minHeight: 168, overflowY: 'auto' }}>
+                {entries.map(([label, value]) => (
                     <div
-                        key={curie}
-                        onClick={() => props.onSelect(curie)}
+                        key={label}
+                        onClick={() => props.onSelect(label)}
                         style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
                         <span
@@ -180,12 +181,12 @@ function TissueBarChart(props: {
                                 textOverflow: 'ellipsis',
                                 verticalAlign: 'bottom',
                                 fontWeight:
-                                    curie === props.selectedCurie
+                                    label === props.selectedCurie
                                         ? 'bold'
                                         : 'normal',
                             }}
                         >
-                            {curie}
+                            {label}
                         </span>
                         <span
                             style={{
@@ -199,7 +200,7 @@ function TissueBarChart(props: {
                                     display: 'inline-block',
                                     width: `${(value / max) * 90}px`,
                                     backgroundColor:
-                                        curie === props.selectedCurie
+                                        label === props.selectedCurie
                                             ? '#2c7fb8'
                                             : '#999',
                                     height: 10,
@@ -221,7 +222,11 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
 }> = props => {
     const rows = props.annotation.annotation?.scores ?? [];
     const curies = React.useMemo(() => availableCuries(rows), [rows]);
-    const [selectedType, setSelectedType] = React.useState<string>('RNA_SEQ');
+    const [selectedType, setSelectedType] = React.useState<string>(
+        () =>
+            OUTPUT_TYPES.find(t => rows.some(r => r.output_type === t)) ??
+            'RNA_SEQ'
+    );
     // Picking a tissue with no passing score must not blank the row's icon
     const [selectedCurie, setSelectedCurie] = React.useState<
         string | undefined
@@ -235,7 +240,9 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
         defaultCurieForCancerType(props.cancerType) ??
         curies[0];
     const selectCurie = (curie: string) => {
-        setSelectedCurie(curie);
+        if (curies.includes(curie)) {
+            setSelectedCurie(curie);
+        }
     };
     const cellStyle: React.CSSProperties = {
         overflow: 'hidden',
