@@ -60,13 +60,6 @@ import NumericNamespaceColumnFormatter from 'shared/components/namespaceColumns/
 import CategoricalNamespaceColumnFormatter from 'shared/components/namespaceColumns/CategoricalNamespaceColumnFormatter';
 import { createNamespaceColumnName } from 'shared/components/namespaceColumns/namespaceColumnsUtils';
 
-export interface IAlphaGenomeScoringState {
-    isTriggered: () => boolean;
-    isScoring: () => boolean;
-    progress: () => { done: number; total: number };
-    trigger: () => void;
-}
-
 export default class ResultsViewMutationMapperStore extends MutationMapperStore {
     constructor(
         protected mutationMapperServerConfig: IServerConfig,
@@ -104,9 +97,6 @@ export default class ResultsViewMutationMapperStore extends MutationMapperStore 
         public indexedVariantAnnotations: MobxPromise<
             { [genomicLocation: string]: VariantAnnotation } | undefined
         >,
-        public indexedAlphaGenomeAnnotations: MobxPromise<
-            { [genomicLocation: string]: VariantAnnotation } | undefined
-        >,
         public uniqueSampleKeyToTumorType: {
             [uniqueSampleKey: string]: string;
         },
@@ -120,8 +110,7 @@ export default class ResultsViewMutationMapperStore extends MutationMapperStore 
         }>,
         protected genomenexusClient?: GenomeNexusAPI,
         protected genomenexusInternalClient?: GenomeNexusAPIInternal,
-        public getTranscriptId?: () => string,
-        public alphaGenomeScoring?: IAlphaGenomeScoringState
+        public getTranscriptId?: () => string
     ) {
         super(
             mutationMapperServerConfig,

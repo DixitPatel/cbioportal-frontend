@@ -49,7 +49,6 @@ import {
     makeObservable,
     observable,
     reaction,
-    runInAction,
 } from 'mobx';
 import {
     IOncoKbData,
@@ -434,14 +433,6 @@ interface IResultsViewExclusionSettings {
 }
 
 const ONCOPRINT_COLOR_CONFIG = 'clinicalTracksColorConfig';
-
-// Background AlphaGenome scoring queue: variants are dispatched to Genome Nexus in chunks of this size
-export const ALPHA_GENOME_SCORING_CHUNK_SIZE = 16;
-
-export type AlphaGenomeScoringProgress = {
-    done: number;
-    total: number;
-};
 
 /* fields and methods in the class below are ordered based on roughly
 /* chronological setup concerns, rather than on encapsulation and public API */
@@ -3910,7 +3901,6 @@ export class ResultsViewPageStore extends AnalysisStore
             this.germlineConsentedSamples,
             this.indexedHotspotData,
             this.indexedVariantAnnotations,
-            this.indexedAlphaGenomeAnnotations,
             this.uniqueSampleKeyToTumorType.result!,
             this.generateGenomeNexusHgvsgUrl,
             this.clinicalDataGroupedBySampleMap,
@@ -3918,13 +3908,7 @@ export class ResultsViewPageStore extends AnalysisStore
             this.clinicalAttributeIdToAvailableFrequency,
             this.genomeNexusClient,
             this.genomeNexusInternalClient,
-            () => this.urlWrapper.query.mutations_transcript_id,
-            {
-                isTriggered: () => this.isAlphaGenomeTriggered,
-                isScoring: () => this.isAlphaGenomeScoring,
-                progress: () => this.alphaGenomeProgress,
-                trigger: () => this.triggerAlphaGenomeScoring(),
-            }
+            () => this.urlWrapper.query.mutations_transcript_id
         );
         this.mutationMapperStoreByGeneWithDriverKey[
             this.getGeneWithDriverKey(gene)
@@ -5473,107 +5457,6 @@ export class ResultsViewPageStore extends AnalysisStore
                           this.genomeNexusClient
                       )
                     : undefined,
-            onError: (err: Error) => {
-                // fail silently, leave the error handling responsibility to the data consumer
-            },
-        },
-        undefined
-    );
-
-    // User started background scoring via toolbar
-    @observable public isAlphaGenomeTriggered = false;
-    // Scoring fetch currently in flight
-    @observable public isAlphaGenomeScoring = false;
-    // Hydrated annotations by genomic location
-    @observable.shallow public streamingAlphaGenomeAnnotations: {
-        [genomicLocation: string]: VariantAnnotation;
-    } = {};
-    // Scored-vs-total count for progress display
-    @observable public alphaGenomeProgress: AlphaGenomeScoringProgress = {
-        done: 0,
-        total: 0,
-    };
-
-    @action.bound
-    public triggerAlphaGenomeScoring(): void {
-        if (
-            this.isAlphaGenomeTriggered ||
-            !getServerConfig().show_alphagenome
-        ) {
-            return;
-        }
-        this.isAlphaGenomeTriggered = true;
-        this.isAlphaGenomeScoring = true;
-        this.streamingAlphaGenomeAnnotations = {};
-        this.alphaGenomeProgress = {
-            done: 0,
-            total: this.mutations.result
-                ? this.mutations.result.length
-                : 0,
-        };
-    }
-
-    // Variants are dispatched sequentially in chunks of 16, merging each chunk into streamingAlphaGenomeAnnotations for progress tracking
-    readonly indexedAlphaGenomeAnnotations = remoteData<
-        { [genomicLocation: string]: VariantAnnotation } | undefined
-    >(
-        {
-            await: () => [this.mutations],
-            invoke: async () => {
-                if (
-                    !this.isAlphaGenomeTriggered ||
-                    !getServerConfig().show_alphagenome ||
-                    !this.mutations.result
-                ) {
-                    return undefined;
-                }
-                const mutations = this.mutations.result;
-                const merged: {
-                    [genomicLocation: string]: VariantAnnotation;
-                } = {};
-                try {
-                    for (
-                        let i = 0;
-                        i < mutations.length;
-                        i += ALPHA_GENOME_SCORING_CHUNK_SIZE
-                    ) {
-                        const chunk = mutations.slice(
-                            i,
-                            i + ALPHA_GENOME_SCORING_CHUNK_SIZE
-                        );
-                        const indexed = await fetchVariantAnnotationsIndexedByGenomicLocation(
-                            chunk,
-                            [GENOME_NEXUS_ARG_FIELD_ENUM.ALPHA_GENOME],
-                            getServerConfig()
-                                .genomenexus_isoform_override_source,
-                            this.genomeNexusClient
-                        );
-                        const done = Math.min(
-                            i + chunk.length,
-                            mutations.length
-                        );
-                        runInAction(() => {
-                            if (indexed) {
-                                Object.assign(
-                                    this.streamingAlphaGenomeAnnotations,
-                                    indexed
-                                );
-                                Object.assign(merged, indexed);
-                            }
-                            this.isAlphaGenomeScoring = true;
-                            this.alphaGenomeProgress = {
-                                done,
-                                total: mutations.length,
-                            };
-                        });
-                    }
-                } finally {
-                    runInAction(() => {
-                        this.isAlphaGenomeScoring = false;
-                    });
-                }
-                return merged;
-            },
             onError: (err: Error) => {
                 // fail silently, leave the error handling responsibility to the data consumer
             },

@@ -252,9 +252,6 @@ export default class ResultsViewMutationMapper extends MutationMapper<
                 indexedVariantAnnotations={
                     this.props.store.indexedVariantAnnotations
                 }
-                indexedAlphaGenomeAnnotations={
-                    this.props.store.indexedAlphaGenomeAnnotations
-                }
                 indexedMyVariantInfoAnnotations={
                     this.props.store.indexedMyVariantInfoAnnotations
                 }
@@ -273,7 +270,6 @@ export default class ResultsViewMutationMapper extends MutationMapper<
                 enableHotspot={this.props.enableHotspot}
                 enableCivic={this.props.enableCivic}
                 enableRevue={this.props.enableRevue}
-                enableAlphaGenome={false}
                 enableCustomDriver={this.props.enableCustomDriver}
                 totalNumberOfExons={this.totalExonNumber}
                 generateGenomeNexusHgvsgUrl={
