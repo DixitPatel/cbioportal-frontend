@@ -39,7 +39,7 @@ describe('AlphaGenomeScoreButton', () => {
             />
         );
         const button = wrapper.find('button');
-        assert.equal(button.text(), '⚡ Score AlphaGenome');
+        assert.equal(button.text(), '⚡ AlphaGenome Score Variants');
         assert.isFalse(button.is('[disabled]'));
         button.simulate('click');
         assert.isTrue(triggered);

@@ -70,7 +70,7 @@ export class AlphaGenomeScoreButton extends React.Component<
                     onClick={() => store.triggerAlphaGenomeScoring()}
                     title="Score all mutations with AlphaGenome in the background"
                 >
-                    ⚡ Score AlphaGenome
+                    ⚡ AlphaGenome Score Variants
                 </button>
             );
         }
