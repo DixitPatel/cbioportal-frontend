@@ -1,11 +1,18 @@
 import { IServerConfig } from './IAppConfig';
 
+declare const ENV_GENOME_NEXUS_URL: string | undefined;
+
 export const ServerConfigDefaults: Partial<IServerConfig> = {
     app_version: '1.0',
     api_cache_limit: 450,
     dat_method: 'none',
     disabled_tabs: '',
-    genomenexus_url: 'https://v1.genomenexus.org',
+    genomenexus_url:
+        typeof ENV_GENOME_NEXUS_URL !== 'undefined' &&
+        ENV_GENOME_NEXUS_URL &&
+        ENV_GENOME_NEXUS_URL !== 'replace_me_env_genome_nexus_url'
+            ? ENV_GENOME_NEXUS_URL
+            : 'https://v1.genomenexus.org',
     genomenexus_url_grch38: 'https://grch38.genomenexus.org',
     genomenexus_website_url: 'https://www.genomenexus.org',
     genomenexus_isoform_override_source: 'mskcc',

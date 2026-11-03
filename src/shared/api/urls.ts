@@ -229,8 +229,12 @@ export function trimProtocol(url: string) {
 }
 export function getProxyUrlIfNecessary(url: any) {
     if (typeof url === 'string') {
-        // use url if https, otherwise use proxy
-        if (url.startsWith('https://')) {
+        // use url if https or local development (localhost / 127.0.0.1), otherwise use proxy
+        if (
+            url.startsWith('https://') ||
+            url.includes('localhost') ||
+            url.includes('127.0.0.1')
+        ) {
             return url;
         } else {
             url = trimProtocol(url);
