@@ -146,7 +146,7 @@ describe('AlphaGenomeCell across table sorts', () => {
             row('SPLICE_SITES', 0.8, 0.995),
         ]);
         const { container, getByText, queryByText } = render(
-            <AlphaGenomeTooltipContent annotation={annotation} />
+            <AlphaGenomeTooltipContent annotation={annotation} showTissueRanking />
         );
         const scroller = () =>
             Array.from(container.querySelectorAll('div')).find(
@@ -189,7 +189,7 @@ describe('AlphaGenomeCell across table sorts', () => {
             },
         ]);
         const { container, getByText, queryByText } = render(
-            <AlphaGenomeTooltipContent annotation={annotation} />
+            <AlphaGenomeTooltipContent annotation={annotation} showTissueRanking />
         );
         const scroller = () =>
             Array.from(container.querySelectorAll('div')).find(
@@ -233,5 +233,53 @@ describe('AlphaGenomeCell across table sorts', () => {
         fireEvent.change(select, { target: { value: 'CL:0000002' } });
         assert.include(container.textContent ?? '', 'αG');
         assert.include(document.body.textContent ?? '', 'CL:0000002');
+    });
+
+    it('shows no tissue ranking by default', () => {
+        const annotation = annotationWithScores([
+            row('RNA_SEQ', 0.9, 0.995, 'CL:0000001'),
+            row('RNA_SEQ', 0.2, 0.995, 'CL:0000002'),
+        ]);
+        const { queryByText } = render(
+            <AlphaGenomeTooltipContent annotation={annotation} />
+        );
+        assert.isNull(queryByText('RNA_SEQ by tissue'));
+    });
+
+    it('preselects no tissue and never shows another tissue\'s row', () => {
+        const annotation = annotationWithScores([
+            row('RNA_SEQ', 0.9, 0.995, 'UBERON:0000473'),
+            row('SPLICE_SITES', 0.4, 0.995),
+        ]);
+        const { container, getByText } = render(
+            <AlphaGenomeTooltipContent annotation={annotation} />
+        );
+        const select = container.querySelector('select') as HTMLSelectElement;
+        assert.equal(select.value, '');
+        getByText('Select a tissue to see tissue-specific scores.');
+        // SPLICE_SITES has no tissue, so it is shown; RNA_SEQ is not
+        assert.isNotNull(container.querySelector('a'));
+        assert.notInclude(container.querySelector('tbody')!.textContent ?? '', 'RNA_SEQ');
+        assert.include(container.querySelector('tbody')!.textContent ?? '', 'SPLICE_SITES');
+    });
+
+    it('uses the patient tissue as default and lists tissues alphabetically', () => {
+        const annotation = annotationWithScores([
+            row('RNA_SEQ', 0.9, 0.995, 'UBERON:0000473'),
+            row('RNA_SEQ', 0.01, 0.5, 'UBERON:0000317'),
+        ]);
+        const { container } = render(
+            <AlphaGenomeTooltipContent
+                annotation={annotation}
+                defaultCurie="UBERON:0000317"
+            />
+        );
+        const select = container.querySelector('select') as HTMLSelectElement;
+        assert.equal(select.value, 'UBERON:0000317');
+        assert.deepEqual(
+            Array.from(select.options).map(o => o.value),
+            ['UBERON:0000317', 'UBERON:0000473']
+        );
+        assert.include(container.querySelector('tbody')!.textContent ?? '', '0.0100');
     });
 });
