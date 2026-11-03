@@ -78,6 +78,7 @@ import {
 } from 'shared/constants';
 import { normalizeMutations } from '../components/mutationMapper/MutationMapperUtils';
 import { getServerConfig } from 'config/config';
+import { getProxyUrlIfNecessary } from 'shared/api/urls';
 import {
     AnnotateCopyNumberAlterationQuery,
     AnnotateMutationByHGVScQuery,
@@ -1514,9 +1515,9 @@ export function getGenomeNexusUrl(studies: CancerStudy[]) {
     // if the study is based on GRCh38, return GRCh38 genome nexus url
     const genomeBuild = getGenomeBuildFromStudies(studies);
     if (genomeBuild === REFERENCE_GENOME.grch38.UCSC) {
-        return getServerConfig().genomenexus_url_grch38!;
+        return getProxyUrlIfNecessary(getServerConfig().genomenexus_url_grch38!)!;
     }
-    return getServerConfig().genomenexus_url!;
+    return getProxyUrlIfNecessary(getServerConfig().genomenexus_url!)!;
 }
 
 export function getSurvivalClinicalAttributesPrefix(

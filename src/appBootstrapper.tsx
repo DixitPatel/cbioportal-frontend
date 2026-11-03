@@ -187,6 +187,14 @@ let redirecting = false;
 //@ts-ignore
 superagent.Request.prototype.end = function(callback) {
     return end.call(this, (error: any, response: any) => {
+        if (error || (response && response.statusCode >= 400)) {
+            console.error(
+                '[SUPERAGENT FAILED]',
+                this.method,
+                this.url,
+                response ? response.statusCode : error?.message || error
+            );
+        }
         if (redirecting) {
             return;
         }
