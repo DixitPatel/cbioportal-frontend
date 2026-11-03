@@ -1943,6 +1943,20 @@ export class PatientViewPageStore {
         },
     });
 
+    // Controls the global Ask Muse Co-Pilot floating window, which is
+    // mounted once in patientViewTabs() so it persists across tab switches.
+    @observable public isAskMuseOpen = false;
+
+    @action.bound
+    public setAskMuseOpen(open: boolean): void {
+        this.isAskMuseOpen = open;
+    }
+
+    @action.bound
+    public toggleAskMuse(): void {
+        this.isAskMuseOpen = !this.isAskMuseOpen;
+    }
+
     // Click triggers batched scoring for variants
     @observable public isAlphaGenomeTriggered = false;
     @observable public isAlphaGenomeScoring = false;

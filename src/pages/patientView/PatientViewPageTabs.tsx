@@ -37,6 +37,7 @@ import genomicOverviewStyles from 'pages/patientView/genomicOverview/styles.modu
 import FeatureInstruction from 'shared/FeatureInstruction/FeatureInstruction';
 import { HelpWidget } from 'shared/components/HelpWidget/HelpWidget';
 import MutationTableWrapper from './mutation/MutationTableWrapper';
+import AskMuseFloatingWindow from 'pages/patientView/mutation/AskMuseFloatingWindow';
 import { PatientViewPageInner } from 'pages/patientView/PatientViewPage';
 import { Else, If } from 'react-if';
 import { PatientViewPlotsTabWrapper } from './PatientViewPlotsTabWrapper';
@@ -99,24 +100,49 @@ export function patientViewTabs(
     urlWrapper: PatientViewUrlWrapper,
     sampleManager: SampleManager | null
 ) {
+    const store = pageInstance.patientViewPageStore;
     return (
-        <MSKTabs
-            id="patientViewPageTabs"
-            key={urlWrapper.hash}
-            activeTabId={urlWrapper.activeTabId}
-            onTabClick={(id: string) => urlWrapper.setActiveTab(id)}
-            className="mainTabs"
-            getPaginationWidth={WindowStore.getWindowWidth}
-            contentWindowExtra={
-                TABS_WITH_HELP.includes(urlWrapper.activeTabId) ? (
-                    <HelpWidget path={urlWrapper.routing.location.pathname} />
-                ) : (
-                    undefined
-                )
-            }
-        >
-            {tabs(pageInstance, sampleManager, urlWrapper)}
-        </MSKTabs>
+        <>
+            <MSKTabs
+                id="patientViewPageTabs"
+                key={urlWrapper.hash}
+                activeTabId={urlWrapper.activeTabId}
+                onTabClick={(id: string) => urlWrapper.setActiveTab(id)}
+                className="mainTabs"
+                getPaginationWidth={WindowStore.getWindowWidth}
+                contentWindowExtra={
+                    <span
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                        }}
+                    >
+                        {TABS_WITH_HELP.includes(urlWrapper.activeTabId) && (
+                            <HelpWidget
+                                path={urlWrapper.routing.location.pathname}
+                            />
+                        )}
+                        <button
+                            className="btn btn-default btn-xs"
+                            onClick={() => store.setAskMuseOpen(true)}
+                            title="Open Ask Muse Co-Pilot Floating Window"
+                        >
+                            🧬 Ask Muse
+                        </button>
+                    </span>
+                }
+            >
+                {tabs(pageInstance, sampleManager, urlWrapper)}
+            </MSKTabs>
+            {store.isAskMuseOpen && (
+                <AskMuseFloatingWindow
+                    store={store}
+                    activeTab={urlWrapper.activeTabId}
+                    onClose={() => store.setAskMuseOpen(false)}
+                />
+            )}
+        </>
     );
 }
 

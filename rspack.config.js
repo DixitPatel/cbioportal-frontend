@@ -473,7 +473,16 @@ var config = {
             {
                 context: ['/api/proxy/localhost:38080', '/proxy/localhost:38080'],
                 target: 'http://localhost:38080',
-                pathRewrite: { '^/(api/)?proxy/localhost:38080': '' },
+                pathRewrite: {
+                    '^/api/proxy/localhost:38080': '',
+                    '^/proxy/localhost:38080': '',
+                },
+                changeOrigin: true,
+                secure: false,
+            },
+            {
+                context: ['/copilot'],
+                target: 'http://localhost:8000',
                 changeOrigin: true,
                 secure: false,
             },

@@ -2,20 +2,39 @@ import * as React from 'react';
 import { observer } from 'mobx-react';
 import { PatientViewPageStore } from '../clinicalInformation/PatientViewPageStore';
 
-const COPILOT_BASE_URL = 'http://localhost:8000';
+const COPILOT_BASE_URL =
+    typeof window !== 'undefined' && window.location.protocol === 'https:'
+        ? ''
+        : 'http://localhost:8000';
 
 export interface IAskMuseFloatingWindowProps {
     store: PatientViewPageStore;
     onClose: () => void;
+    // Active patient-view tab id (e.g. 'summary' | 'pathways' |
+    // 'clinicalData' | 'pathologyReport'). Falls back to the URL when omitted.
+    activeTab?: string;
 }
 
 type ChatRole = 'user' | 'assistant';
+
+interface IPaper {
+    pmid: string;
+    title: string;
+    source?: string;
+    pubdate?: string;
+}
 
 interface IChatMessage {
     role: ChatRole;
     text: string;
     // Populated when the assistant response suggests an OncoTree mapping
     suggestedMapping?: any;
+    // Populated by query_pubmed replies: selectable literature cards
+    papers?: IPaper[];
+    pubmedUrl?: string;
+    query?: string;
+    // PMIDs whose abstracts were ingested for a grounded synthesis
+    groundedOn?: string[];
 }
 
 interface IQuickPrompt {
@@ -23,20 +42,99 @@ interface IQuickPrompt {
     label: string;
 }
 
-const QUICK_PROMPTS: IQuickPrompt[] = [
+const DEFAULT_QUICK_PROMPTS: IQuickPrompt[] = [
     { action: 'map_oncotree', label: 'Map OncoTree' },
-    { action: 'cross_reference_genes', label: 'Cross-reference genes' },
-    { action: 'show_batch_failures', label: 'Show batch failures' },
-    { action: 'prep_literature_context', label: 'Prep literature context' },
+    { action: 'query_pubmed', label: 'Query PubMed' },
+    { action: 'show_batch_failures', label: 'Show failures' },
+    { action: 'colab_recipe', label: '🚀 Colab Cookbook' },
 ];
 
+// Tab-contextual question pills (W7 contextual vision taxonomy). Keyed by
+// patient-view tab id; unknown tabs fall back to the core prompts only.
+const TAB_CONTEXT_PROMPTS: { [tab: string]: IQuickPrompt[] } = {
+    summary: [
+        { action: 'tmb_grade_paradox', label: 'TMB–grade paradox' },
+        { action: 'survival_gap', label: 'PFS–stage gap' },
+    ],
+    timeline: [
+        { action: 'fail_kinetics', label: '⏱️ Gemcitabine kinetics' },
+        { action: 'survival_gap', label: 'PFS–stage gap' },
+    ],
+    pathways: [
+        { action: 'cdkn2a_tp53_axis', label: 'CDKN2A–TP53 axis' },
+        {
+            action: 'ras_cellcycle_cooperation',
+            label: 'KRAS–CDKN2A synergy',
+        },
+    ],
+    clinicalData: [
+        { action: 'tmb_grade_paradox', label: 'TMB–grade paradox' },
+        { action: 'survival_gap', label: 'PFS–stage gap' },
+    ],
+    pathologyReport: [
+        { action: 'pathology_r1_reconciliation', label: 'R1 margin story' },
+        { action: 'angioinvasion_failure', label: 'Arterial invasion risk' },
+    ],
+};
+
+function resolveActiveTab(explicitTab?: string): string {
+    if (explicitTab) {
+        return explicitTab;
+    }
+    if (typeof window === 'undefined') {
+        return '';
+    }
+    // Prefer the patient-view `tab` query param, then the last path segment
+    // (PatientViewUrlWrapper derives activeTabId from the pathname).
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab');
+        if (tabParam) {
+            return tabParam;
+        }
+    } catch (e) {
+        // fall through to pathname parsing
+    }
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : '';
+}
+
+// Render inline [text](url) Markdown links as clickable anchors.
+function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
+    const parts: React.ReactNode[] = [];
+    const linkPattern = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let key = 0;
+    while ((match = linkPattern.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+            parts.push(text.slice(lastIndex, match.index));
+        }
+        parts.push(
+            <a
+                key={`${keyPrefix}-link-${key++}`}
+                href={match[2]}
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                {match[1]}
+            </a>
+        );
+        lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) {
+        parts.push(text.slice(lastIndex));
+    }
+    return parts;
+}
+
 // Minimal Markdown-ish renderer: bullet/numbered lines become lists,
-// everything else renders as paragraphs. Intent: readable chat text
-// without pulling in a Markdown dependency.
+// [text](url) links become anchors, everything else renders as paragraphs.
+// Intent: readable chat text without pulling in a Markdown dependency.
 const ChatText: React.FunctionComponent<{ text: string }> = ({ text }) => {
     const lines = text.split('\n');
     const blocks: React.ReactNode[] = [];
-    let listItems: string[] = [];
+    let listItems: React.ReactNode[][] = [];
     const flushList = (key: string) => {
         if (listItems.length > 0) {
             blocks.push(
@@ -53,13 +151,13 @@ const ChatText: React.FunctionComponent<{ text: string }> = ({ text }) => {
         const bullet = line.match(/^\s*[-*]\s+(.*)$/);
         const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
         if (bullet || numbered) {
-            listItems.push((bullet || numbered)![1]);
+            listItems.push(renderInline((bullet || numbered)![1], `li-${i}`));
         } else {
             flushList(`list-${i}`);
             if (line.trim().length > 0) {
                 blocks.push(
                     <p key={`p-${i}`} style={{ margin: '4px 0' }}>
-                        {line}
+                        {renderInline(line, `p-${i}`)}
                     </p>
                 );
             }
@@ -71,12 +169,20 @@ const ChatText: React.FunctionComponent<{ text: string }> = ({ text }) => {
 
 const AskMuseFloatingWindow: React.FunctionComponent<
     IAskMuseFloatingWindowProps
-> = observer(({ store, onClose }) => {
+> = observer(({ store, onClose, activeTab }) => {
     const [messages, setMessages] = React.useState<IChatMessage[]>([]);
     const [input, setInput] = React.useState('');
     const [isBusy, setIsBusy] = React.useState(false);
     const [indexStatus, setIndexStatus] = React.useState('');
     const [saveStatus, setSaveStatus] = React.useState('');
+    // PMIDs selected per assistant message (message index -> pmids)
+    const [selectedByMsg, setSelectedByMsg] = React.useState<{
+        [msgIndex: number]: string[];
+    }>({});
+    // PMIDs whose abstracts were ingested via synthesize-pmids; sent with
+    // follow-up chat so the backend answers grounded on those papers.
+    const [ingestedPmids, setIngestedPmids] = React.useState<string[]>([]);
+    const [synthesizeStatus, setSynthesizeStatus] = React.useState('');
     const threadRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -84,6 +190,12 @@ const AskMuseFloatingWindow: React.FunctionComponent<
             threadRef.current.scrollTop = threadRef.current.scrollHeight;
         }
     }, [messages]);
+
+    const resolvedActiveTab = resolveActiveTab(activeTab);
+    const quickPrompts: IQuickPrompt[] = [
+        ...DEFAULT_QUICK_PROMPTS,
+        ...(TAB_CONTEXT_PROMPTS[resolvedActiveTab] || []),
+    ];
 
     // Study context extracted from the patient view store (read-only,
     // no fetch is triggered by reading these values).
@@ -93,7 +205,7 @@ const AskMuseFloatingWindow: React.FunctionComponent<
         store.studyIdToStudy.isComplete && studyId
             ? (store.studyIdToStudy.result as any)[studyId]
             : undefined;
-    // Fix 3: prioritize the OncoTree code (e.g. PAAD) over the full name.
+    // Prioritize the OncoTree code (e.g. PAAD) over the full name.
     const cancerType: string =
         (study &&
             (study.cancerTypeId ||
@@ -104,7 +216,7 @@ const AskMuseFloatingWindow: React.FunctionComponent<
         store.mutationData.isComplete && store.mutationData.result
             ? (store.mutationData.result as any[])
             : [];
-    // Fix 2: resolve each mutation's real HGVS variant_id from the
+    // Resolve each mutation's real HGVS variant_id from the
     // AlphaGenome annotation indexes, falling back to a deterministic
     // chr:g.startRef>Alt id. All mutations are included (no truncation).
     const indexedAnnotations: { [genomicLocation: string]: any } =
@@ -116,8 +228,7 @@ const AskMuseFloatingWindow: React.FunctionComponent<
         (store.streamingAlphaGenomeAnnotations as any) || {};
     const resolveVariantId = (m: any): string => {
         const key = `${m.chr},${m.startPosition},${m.endPosition},${m.referenceAllele},${m.variantAllele}`;
-        const ann =
-            indexedAnnotations[key] || streamingAnnotations[key];
+        const ann = indexedAnnotations[key] || streamingAnnotations[key];
         const hgvs = ann?.variant || ann?.hg38_variant;
         if (typeof hgvs === 'string' && hgvs.length > 0) {
             return hgvs;
@@ -142,54 +253,195 @@ const AskMuseFloatingWindow: React.FunctionComponent<
         return response.json();
     };
 
-    // Fix 1: actionType is null for free-text chat, or the quick-prompt
+    // actionType is null for free-text chat, or the quick-prompt
     // action string when clicking a pill. Sent as snake_case action_type.
+    // Uses Server-Sent Events (SSE) via POST /copilot/chat/stream for real-time streaming.
     const sendChat = async (
         actionType: string | null,
         message: string
     ) => {
         const trimmed = message.trim();
-        const isFreeText =
-            actionType === null || actionType === 'chat';
+        const isFreeText = actionType === null || actionType === 'chat';
         if (isBusy || (isFreeText && trimmed.length === 0)) {
             return;
         }
         setIsBusy(true);
         setSaveStatus('');
         const userText = isFreeText ? trimmed : `/${actionType} ${trimmed}`;
-        setMessages(prev => [...prev, { role: 'user', text: userText }]);
+        // Append user turn and initial empty assistant turn for streaming
+        setMessages(prev => [
+            ...prev,
+            { role: 'user', text: userText },
+            { role: 'assistant', text: '' },
+        ]);
         if (isFreeText) {
             setInput('');
         }
+
+        const requestBody = {
+            study_id: studyId,
+            case_id: caseId,
+            cancer_type: cancerType,
+            active_tab: resolvedActiveTab,
+            action_type: isFreeText ? null : actionType,
+            message: trimmed,
+            history: messages.map(m => ({
+                role: m.role,
+                content: m.text,
+            })),
+            variants,
+            ingested_pmids: ingestedPmids,
+        };
+
         try {
-            const data = await postJson('/copilot/chat', {
+            const response = await fetch(`${COPILOT_BASE_URL}/copilot/chat/stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+            });
+
+            if (!response.ok || !response.body) {
+                throw new Error(`Streaming error HTTP ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let accumulated = '';
+            let lineBuffer = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                lineBuffer += decoder.decode(value, { stream: true });
+                const lines = lineBuffer.split('\n');
+                lineBuffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine.startsWith('data:')) continue;
+                    const jsonStr = trimmedLine.replace(/^data:\s*/, '');
+                    if (!jsonStr) continue;
+                    try {
+                        const event = JSON.parse(jsonStr);
+                        if (event.delta) {
+                            accumulated += event.delta;
+                            setMessages(prev => {
+                                const copy = [...prev];
+                                const last = copy[copy.length - 1];
+                                if (last && last.role === 'assistant') {
+                                    copy[copy.length - 1] = {
+                                        ...last,
+                                        text: accumulated,
+                                    };
+                                }
+                                return copy;
+                            });
+                        }
+                        if (event.done) {
+                            const finalText = event.reply || accumulated;
+                            setMessages(prev => {
+                                const copy = [...prev];
+                                const last = copy[copy.length - 1];
+                                if (last && last.role === 'assistant') {
+                                    copy[copy.length - 1] = {
+                                        ...last,
+                                        text: finalText,
+                                        suggestedMapping: event.suggested_mapping,
+                                        papers: event.papers,
+                                        pubmedUrl: event.pubmed_url || event.pubmedUrl,
+                                        query: event.query,
+                                    };
+                                }
+                                return copy;
+                            });
+                        }
+                    } catch (err) {
+                        // ignore unparseable chunk
+                    }
+                }
+            }
+        } catch (streamErr: any) {
+            // Fallback to non-streaming POST /copilot/chat
+            try {
+                const data = await postJson('/copilot/chat', requestBody);
+                setMessages(prev => {
+                    const copy = [...prev];
+                    const last = copy[copy.length - 1];
+                    if (last && last.role === 'assistant') {
+                        copy[copy.length - 1] = {
+                            role: 'assistant',
+                            text: data.reply || data.message || JSON.stringify(data),
+                            suggestedMapping: data.suggested_mapping,
+                            papers: data.papers,
+                            pubmedUrl: data.pubmed_url || data.pubmedUrl,
+                            query: data.query,
+                        };
+                    }
+                    return copy;
+                });
+            } catch (fallbackErr: any) {
+                setMessages(prev => {
+                    const copy = [...prev];
+                    const last = copy[copy.length - 1];
+                    if (last && last.role === 'assistant') {
+                        copy[copy.length - 1] = {
+                            role: 'assistant',
+                            text: `Co-Pilot request failed: ${fallbackErr?.message || streamErr?.message || fallbackErr}`,
+                        };
+                    }
+                    return copy;
+                });
+            }
+        } finally {
+            setIsBusy(false);
+        }
+    };
+
+    const togglePmid = (msgIndex: number, pmid: string) => {
+        setSelectedByMsg(prev => {
+            const current = prev[msgIndex] || [];
+            const next = current.includes(pmid)
+                ? current.filter(p => p !== pmid)
+                : [...current, pmid];
+            return { ...prev, [msgIndex]: next };
+        });
+    };
+
+    const synthesizePmids = async (msgIndex: number) => {
+        const selected = selectedByMsg[msgIndex] || [];
+        if (isBusy || selected.length === 0) {
+            return;
+        }
+        setIsBusy(true);
+        setSynthesizeStatus('Synthesizing…');
+        try {
+            const data = await postJson('/copilot/synthesize-pmids', {
+                pmids: selected,
+                question: input.trim(),
                 study_id: studyId,
                 case_id: caseId,
                 cancer_type: cancerType,
-                action_type: isFreeText ? null : actionType,
-                message: trimmed,
-                history: messages.map(m => ({
-                    role: m.role,
-                    content: m.text,
-                })),
                 variants,
             });
+            const grounded: string[] = data.pmids || selected;
+            setIngestedPmids(prev =>
+                Array.from(new Set([...prev, ...grounded]))
+            );
             setMessages(prev => [
                 ...prev,
                 {
                     role: 'assistant',
-                    text: data.reply || data.message || JSON.stringify(data),
-                    suggestedMapping: data.suggested_mapping,
+                    text:
+                        data.synthesis ||
+                        data.reply ||
+                        data.message ||
+                        JSON.stringify(data),
+                    groundedOn: grounded,
                 },
             ]);
+            setSynthesizeStatus('');
         } catch (e: any) {
-            setMessages(prev => [
-                ...prev,
-                {
-                    role: 'assistant',
-                    text: `Co-Pilot request failed: ${e?.message || e}`,
-                },
-            ]);
+            setSynthesizeStatus(`Synthesis failed: ${e?.message || e}`);
         } finally {
             setIsBusy(false);
         }
@@ -208,7 +460,7 @@ const AskMuseFloatingWindow: React.FunctionComponent<
                 cancer_type: cancerType,
                 variants,
             });
-            // Fix 7a: indexed_count (number) drives the status text.
+            // indexed_count (number) drives the status text.
             const count =
                 data.indexed_count ??
                 (Array.isArray(data.genes_indexed)
@@ -288,6 +540,11 @@ const AskMuseFloatingWindow: React.FunctionComponent<
                             {indexStatus}
                         </div>
                     )}
+                    {ingestedPmids.length > 0 && (
+                        <div style={{ fontSize: 11, color: '#2a7a2a' }}>
+                            📚 Grounded on {ingestedPmids.length} paper(s)
+                        </div>
+                    )}
                 </div>
                 <button
                     className="btn btn-default btn-xs"
@@ -341,6 +598,17 @@ const AskMuseFloatingWindow: React.FunctionComponent<
                         }}
                     >
                         <ChatText text={m.text} />
+                        {m.groundedOn && m.groundedOn.length > 0 && (
+                            <div
+                                style={{
+                                    marginTop: 4,
+                                    fontSize: 11,
+                                    color: '#2a7a2a',
+                                }}
+                            >
+                                📚 Grounded on {m.groundedOn.join(', ')}
+                            </div>
+                        )}
                         {m.role === 'assistant' && m.suggestedMapping && (
                             <div style={{ marginTop: 6 }}>
                                 <button
@@ -355,11 +623,122 @@ const AskMuseFloatingWindow: React.FunctionComponent<
                                 </button>
                             </div>
                         )}
+                        {m.role === 'assistant' &&
+                            m.papers &&
+                            m.papers.length > 0 && (
+                                <div style={{ marginTop: 6 }}>
+                                    {m.query && (
+                                        <div
+                                            style={{
+                                                fontSize: 11,
+                                                color: '#555',
+                                                marginBottom: 4,
+                                                wordBreak: 'break-all',
+                                            }}
+                                        >
+                                            {m.query}
+                                        </div>
+                                    )}
+                                    {m.pubmedUrl && (
+                                        <div style={{ marginBottom: 4 }}>
+                                            <a
+                                                href={m.pubmedUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                Open query on PubMed
+                                            </a>
+                                        </div>
+                                    )}
+                                    {m.papers.map(paper => {
+                                        const checked = (
+                                            selectedByMsg[i] || []
+                                        ).includes(paper.pmid);
+                                        return (
+                                            <label
+                                                key={paper.pmid}
+                                                style={{
+                                                    display: 'flex',
+                                                    gap: 6,
+                                                    alignItems: 'flex-start',
+                                                    border:
+                                                        '1px solid #e0e0e0',
+                                                    borderRadius: 4,
+                                                    padding: '4px 6px',
+                                                    marginBottom: 4,
+                                                    background: '#fff',
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    onChange={() =>
+                                                        togglePmid(
+                                                            i,
+                                                            paper.pmid
+                                                        )
+                                                    }
+                                                    aria-label={`Select PMID ${paper.pmid}`}
+                                                />
+                                                <span>
+                                                    <a
+                                                        href={`https://pubmed.ncbi.nlm.nih.gov/${paper.pmid}/`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={e =>
+                                                            e.stopPropagation()
+                                                        }
+                                                    >
+                                                        PMID {paper.pmid}
+                                                    </a>
+                                                    {paper.title
+                                                        ? ` — ${paper.title}`
+                                                        : ''}
+                                                    {(paper.source ||
+                                                        paper.pubdate) && (
+                                                        <span
+                                                            style={{
+                                                                color: '#888',
+                                                            }}
+                                                        >
+                                                            {paper.source
+                                                                ? ` (${paper.source}`
+                                                                : ' ('}
+                                                            {paper.pubdate
+                                                                ? ` ${paper.pubdate}`
+                                                                : ''}
+                                                            )
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </label>
+                                        );
+                                    })}
+                                    <button
+                                        className="btn btn-primary btn-xs"
+                                        onClick={() => synthesizePmids(i)}
+                                        disabled={
+                                            isBusy ||
+                                            (selectedByMsg[i] || []).length ===
+                                                0
+                                        }
+                                        title="Synthesize the selected papers with Meta Wonder"
+                                    >
+                                        Synthesize Selected Papers
+                                    </button>
+                                </div>
+                            )}
                     </div>
                 ))}
                 {saveStatus && (
                     <div style={{ fontSize: 11, color: '#666' }}>
                         {saveStatus}
+                    </div>
+                )}
+                {synthesizeStatus && (
+                    <div style={{ fontSize: 11, color: '#666' }}>
+                        {synthesizeStatus}
                     </div>
                 )}
             </div>
@@ -372,10 +751,8 @@ const AskMuseFloatingWindow: React.FunctionComponent<
                     gap: 8,
                 }}
             >
-                <div
-                    style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
-                >
-                    {QUICK_PROMPTS.map(p => (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {quickPrompts.map(p => (
                         <button
                             key={p.action}
                             className="btn btn-default btn-xs"
