@@ -61,6 +61,9 @@ const ColabRecipeCard: React.FunctionComponent<{
                 body: JSON.stringify({
                     variant_id: variantId,
                     oncotree_code: oncotreeCode,
+                    protein_change:
+                        variants.find(v => v.variantId === variantId)
+                            ?.proteinChange || null,
                 }),
             });
             const data = await response.json();
