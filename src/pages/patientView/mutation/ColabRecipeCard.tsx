@@ -16,6 +16,8 @@ interface IColabParams {
     tissue_label: string;
     param_cell: string;
     colab_url: string;
+    // 'published' on first use (the sidecar pushed the notebook to GitHub)
+    notebook_status?: string;
 }
 
 const LEVEL_RANK: { [level: string]: number } = { strong: 0, moderate: 1 };
@@ -40,9 +42,7 @@ const ColabRecipeCard: React.FunctionComponent<{
     variants: IColabVariant[];
     oncotreeCode: string;
 }> = ({ baseUrl, variants, oncotreeCode }) => {
-    const sorted = React.useMemo(() => sortColabVariants(variants), [
-        variants,
-    ]);
+    const sorted = React.useMemo(() => sortColabVariants(variants), [variants]);
     const [selected, setSelected] = React.useState('');
     const [params, setParams] = React.useState<IColabParams | null>(null);
     const [status, setStatus] = React.useState('');
@@ -69,7 +69,7 @@ const ColabRecipeCard: React.FunctionComponent<{
             }
             setParams(data);
             setStatus('');
-        } catch (e: any) {
+        } catch (e) {
             setStatus(`Could not build cell 4: ${e?.message || e}`);
         }
     };
@@ -81,7 +81,7 @@ const ColabRecipeCard: React.FunctionComponent<{
         try {
             await navigator.clipboard.writeText(params.param_cell);
             setStatus('Cell 4 copied.');
-        } catch (e: any) {
+        } catch (e) {
             setStatus(`Copy failed: ${e?.message || e}`);
         }
     };
@@ -120,7 +120,8 @@ const ColabRecipeCard: React.FunctionComponent<{
                 <>
                     <div style={{ fontSize: 11, color: '#555' }}>
                         {params.gene} {params.hg38_variant} · tissue{' '}
-                        {params.tissue_label} ({params.ontology_terms.join(', ')})
+                        {params.tissue_label} (
+                        {params.ontology_terms.join(', ')})
                     </div>
                     <pre
                         style={{
@@ -150,10 +151,21 @@ const ColabRecipeCard: React.FunctionComponent<{
                             Open in Colab ↗
                         </a>
                     </div>
+                    {params.notebook_status === 'published' && (
+                        <div
+                            style={{
+                                fontSize: 11,
+                                color: '#2a7a2a',
+                                marginTop: 4,
+                            }}
+                        >
+                            First use: the notebook was published to GitHub.
+                        </div>
+                    )}
                     <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
                         In Colab: enter your API key in cell 2 (or set the
-                        secret ALPHA_GENOME_API_KEY), run cells 1–3, paste
-                        into cell 4, run cells 4–7.
+                        secret ALPHA_GENOME_API_KEY), run cells 1–3, paste into
+                        cell 4, run cells 4–7.
                     </div>
                 </>
             )}
