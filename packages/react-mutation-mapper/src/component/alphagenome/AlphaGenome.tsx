@@ -47,11 +47,6 @@ export function sortValue(
     return label === 'strong' ? 0 : label === 'moderate' ? 1 : 2;
 }
 
-// Off: ranking tissues by score picks whichever reference tissue scores
-// highest, not the patient's tissue. Kept behind a flag for exploration.
-export const SHOW_TISSUE_RANKING = false;
-
-// Alphabetical, never by score
 function availableCuries(rows: AlphaGenomeScore[]): string[] {
     const curies: string[] = [];
     for (const row of rows) {
@@ -59,7 +54,7 @@ function availableCuries(rows: AlphaGenomeScore[]): string[] {
             curies.push(row.ontology_curie);
         }
     }
-    return curies.sort();
+    return curies;
 }
 
 function formatScore(value: number | undefined | null): string {
@@ -75,18 +70,16 @@ function rowForOutputType(
     ontologyCurie?: string
 ): AlphaGenomeScore | undefined {
     const typed = rows.filter(row => row.output_type === outputType);
-    // Rows of the selected tissue; tissue-agnostic rows (SPLICE_SITES) when the
-    // output type has no tissue. Never fall back to another tissue's rows.
-    const inTissue = ontologyCurie
-        ? typed.filter(row => row.ontology_curie === ontologyCurie)
-        : [];
-    const pool =
-        inTissue.length > 0 ? inTissue : typed.filter(row => !row.ontology_curie);
-    if (pool.length === 0) {
+    if (typed.length === 0) {
         return undefined;
     }
-    // Top track within the tissue (e.g. polyA vs total RNA-seq)
-    return pool.reduce((best, row) =>
+    const match = ontologyCurie
+        ? typed.find(row => row.ontology_curie === ontologyCurie)
+        : undefined;
+    if (match) {
+        return match;
+    }
+    return typed.reduce((best, row) =>
         Math.abs(row.raw_score ?? 0) > Math.abs(best.raw_score ?? 0)
             ? row
             : best
@@ -175,9 +168,6 @@ function TissueBarChart(props: {
 
 export const AlphaGenomeTooltipContent: React.FunctionComponent<{
     annotation: AlphaGenomeAnnotation;
-    // Patient tissue (OncoTree -> UBERON). Without it no tissue is preselected.
-    defaultCurie?: string;
-    showTissueRanking?: boolean;
 }> = props => {
     const rows = props.annotation.annotation?.scores ?? [];
     const curies = React.useMemo(() => availableCuries(rows), [rows]);
@@ -193,8 +183,7 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
     // Fall back when a stored tissue is absent post-sort
     const valid = (curie: string | undefined) =>
         curie && curies.includes(curie) ? curie : undefined;
-    const effectiveCurie = valid(selectedCurie) ?? valid(props.defaultCurie);
-    const showTissueRanking = props.showTissueRanking ?? SHOW_TISSUE_RANKING;
+    const effectiveCurie = valid(selectedCurie) ?? curies[0];
     const selectCurie = (curie: string) => {
         if (curies.includes(curie)) {
             setSelectedCurie(curie);
@@ -284,9 +273,6 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
                             value={effectiveCurie ?? ''}
                             onChange={e => selectCurie(e.target.value)}
                         >
-                            {!effectiveCurie && (
-                                <option value="">Select tissue</option>
-                            )}
                             {curies.map(curie => (
                                 <option key={curie} value={curie}>
                                     {curie}
@@ -294,21 +280,14 @@ export const AlphaGenomeTooltipContent: React.FunctionComponent<{
                             ))}
                         </select>
                     </label>
-                    {!effectiveCurie && (
-                        <div style={{ color: '#666' }}>
-                            Select a tissue to see tissue-specific scores.
-                        </div>
-                    )}
                 </div>
             )}
-            {showTissueRanking && (
-                <TissueBarChart
-                    rows={rows}
-                    outputType={selectedType}
-                    selectedCurie={effectiveCurie}
-                    onSelect={selectCurie}
-                />
-            )}
+            <TissueBarChart
+                rows={rows}
+                outputType={selectedType}
+                selectedCurie={effectiveCurie}
+                onSelect={selectCurie}
+            />
             <div style={{ marginTop: 8, fontStyle: 'italic' }}>
                 {DISCLAIMER}
             </div>
