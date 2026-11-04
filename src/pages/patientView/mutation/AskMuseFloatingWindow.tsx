@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { observer } from 'mobx-react';
 import { PatientViewPageStore } from '../clinicalInformation/PatientViewPageStore';
+import ColabRecipeCard, { IColabVariant } from './ColabRecipeCard';
 
 const COPILOT_BASE_URL =
     typeof window !== 'undefined' && window.location.protocol === 'https:'
@@ -35,6 +36,8 @@ interface IChatMessage {
     query?: string;
     // PMIDs whose abstracts were ingested for a grounded synthesis
     groundedOn?: string[];
+    // Local UI card (no chat text); left out of the history sent to Muse
+    kind?: 'colab';
 }
 
 interface IQuickPrompt {
@@ -235,6 +238,43 @@ const AskMuseFloatingWindow: React.FunctionComponent<
         }
         return `${m.chr}:g.${m.startPosition}${m.referenceAllele}>${m.variantAllele}`;
     };
+    // Colab Cookbook: this sample's variants that have an AlphaGenome record
+    const colabVariants: IColabVariant[] = [];
+    const seenColab = new Set<string>();
+    allMutations.forEach(m => {
+        const key = `${m.chr},${m.startPosition},${m.endPosition},${m.referenceAllele},${m.variantAllele}`;
+        const ann = indexedAnnotations[key] || streamingAnnotations[key];
+        const ag = ann?.alpha_genome?.annotation;
+        if (!ag || !ann?.variant || seenColab.has(ann.variant)) {
+            return;
+        }
+        seenColab.add(ann.variant);
+        colabVariants.push({
+            variantId: ann.variant,
+            gene: ag.canonical_gene || m.gene?.hugoGeneSymbol || 'UNKNOWN',
+            proteinChange: m.proteinChange,
+            level: ag.score_level,
+            merged: ag.merged_splicing_score,
+        });
+    });
+    // Sample-level OncoTree code; study types can be "mixed"
+    const sampleClinical: any[] =
+        store.clinicalDataGroupedBySample.isComplete &&
+        store.clinicalDataGroupedBySample.result
+            ? (store.clinicalDataGroupedBySample.result as any[])
+            : [];
+    const currentSample =
+        sampleClinical.find(s => s.id === store.sampleId) || sampleClinical[0];
+    const oncotreeCode: string =
+        (currentSample?.clinicalData || []).find(
+            (c: any) => c.clinicalAttributeId === 'ONCOTREE_CODE'
+        )?.value || cancerType;
+    const openColabCard = () =>
+        setMessages(prev => [
+            ...prev,
+            { role: 'assistant', text: '', kind: 'colab' },
+        ]);
+
     const variants = allMutations.map(m => ({
         variant_id: resolveVariantId(m),
         hugo_symbol: m.gene?.hugoGeneSymbol || m.hugoGeneSymbol || 'UNKNOWN',
@@ -285,7 +325,7 @@ const AskMuseFloatingWindow: React.FunctionComponent<
             active_tab: resolvedActiveTab,
             action_type: isFreeText ? null : actionType,
             message: trimmed,
-            history: messages.map(m => ({
+            history: messages.filter(m => !m.kind).map(m => ({
                 role: m.role,
                 content: m.text,
             })),
@@ -597,7 +637,15 @@ const AskMuseFloatingWindow: React.FunctionComponent<
                             whiteSpace: 'normal',
                         }}
                     >
-                        <ChatText text={m.text} />
+                        {m.kind === 'colab' ? (
+                            <ColabRecipeCard
+                                baseUrl={COPILOT_BASE_URL}
+                                variants={colabVariants}
+                                oncotreeCode={oncotreeCode}
+                            />
+                        ) : (
+                            <ChatText text={m.text} />
+                        )}
                         {m.groundedOn && m.groundedOn.length > 0 && (
                             <div
                                 style={{
@@ -756,7 +804,11 @@ const AskMuseFloatingWindow: React.FunctionComponent<
                         <button
                             key={p.action}
                             className="btn btn-default btn-xs"
-                            onClick={() => sendChat(p.action, p.label)}
+                            onClick={() =>
+                                p.action === 'colab_recipe'
+                                    ? openColabCard()
+                                    : sendChat(p.action, p.label)
+                            }
                             disabled={isBusy}
                             title={`Ask Co-Pilot: ${p.label}`}
                         >
