@@ -111,26 +111,13 @@ export function patientViewTabs(
                 className="mainTabs"
                 getPaginationWidth={WindowStore.getWindowWidth}
                 contentWindowExtra={
-                    <span
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                        }}
-                    >
-                        {TABS_WITH_HELP.includes(urlWrapper.activeTabId) && (
-                            <HelpWidget
-                                path={urlWrapper.routing.location.pathname}
-                            />
-                        )}
-                        <button
-                            className="btn btn-default btn-xs"
-                            onClick={() => store.setAskMuseOpen(true)}
-                            title="Open Ask Muse Co-Pilot Floating Window"
-                        >
-                            🧬 Ask Muse
-                        </button>
-                    </span>
+                    TABS_WITH_HELP.includes(urlWrapper.activeTabId) ? (
+                        <HelpWidget
+                            path={urlWrapper.routing.location.pathname}
+                        />
+                    ) : (
+                        undefined
+                    )
                 }
             >
                 {tabs(pageInstance, sampleManager, urlWrapper)}
